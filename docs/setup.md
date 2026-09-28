@@ -27,7 +27,7 @@ Other commands (from the repo root): `pnpm lint`, `pnpm check`, `pnpm test`,
 
 ## One-time Cloudflare setup
 
-Replace `read.example.com` with your subdomain throughout.
+The app is served at `reader.nelsonfamily.fyi`.
 
 1. **Create the database**
 
@@ -38,13 +38,14 @@ Replace `read.example.com` with your subdomain throughout.
 
    Put the printed `database_id` in `apps/web/wrangler.jsonc`.
 
-2. **Point the Worker at your subdomain.** In `apps/web/wrangler.jsonc`, set
-   `routes[0].pattern` to your subdomain. The domain must be a zone on your
-   Cloudflare account; `wrangler deploy` creates the DNS record.
+2. **Subdomain.** `apps/web/wrangler.jsonc` already routes the Worker to
+   `reader.nelsonfamily.fyi` as a custom domain. `nelsonfamily.fyi` must be a zone
+   on your Cloudflare account; `wrangler deploy` creates the DNS record and
+   certificate. There must not already be a DNS record for `reader`.
 
 3. **Put Cloudflare Access in front of it** (Zero Trust dashboard → Access →
    Applications → Add → Self-hosted):
-   - Application domain: `read.example.com`
+   - Application domain: `reader.nelsonfamily.fyi`
    - Policy: Allow, Include → Emails → your email
    - After saving, copy the **Application Audience (AUD) tag** from the
      application's overview.

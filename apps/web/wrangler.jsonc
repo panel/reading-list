@@ -13,7 +13,7 @@
 	// (requests without a valid Access JWT are rejected by the app anyway).
 	"workers_dev": false,
 	"preview_urls": false,
-	"routes": [{ "pattern": "read.example.com", "custom_domain": true }],
+	"routes": [{ "pattern": "reader.nelsonfamily.fyi", "custom_domain": true }],
 	"d1_databases": [
 		{
 			"binding": "DB",
