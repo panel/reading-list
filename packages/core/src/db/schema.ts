@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { ulid } from '../ulid';
 
 const id = () =>
@@ -34,6 +34,7 @@ export const links = sqliteTable(
 		author: text('author'),
 		description: text('description'),
 		imageUrl: text('image_url'),
+		faviconUrl: text('favicon_url'),
 		note: text('note'),
 		status: text('status', { enum: ['queued', 'archived'] })
 			.notNull()
@@ -45,18 +46,52 @@ export const links = sqliteTable(
 		// Points at feed_entries.id once feeds exist (Slice 4); no FK so entries can be pruned.
 		sourceEntryId: text('source_entry_id'),
 		savedAt: timestampNow('saved_at'),
+		// Queue order: set when saved, bumped to now when you choose "Later".
+		// The DB default is a constant because SQLite can't add a column with a
+		// computed default to an existing table; the app always sets it.
+		queuedAt: timestamp('queued_at')
+			.notNull()
+			.default(sql`0`)
+			.$defaultFn(() => new Date()),
 		readAt: timestamp('read_at'),
 		updatedAt: timestampNow('updated_at')
 	},
 	(t) => [
 		uniqueIndex('links_user_canonical_url').on(t.userId, t.canonicalUrl),
-		index('links_user_status_saved').on(t.userId, t.status, t.savedAt),
+		index('links_user_status_queued').on(t.userId, t.status, t.queuedAt),
 		index('links_user_reference').on(t.userId, t.isReference, t.savedAt),
 		check('links_status', sql`${t.status} IN ('queued', 'archived')`),
 		check('links_source', sql`${t.source} IN ('manual', 'feed')`)
 	]
 );
 
+export const tags = sqliteTable(
+	'tags',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [uniqueIndex('tags_user_name').on(t.userId, t.name)]
+);
+
+export const linkTags = sqliteTable(
+	'link_tags',
+	{
+		linkId: text('link_id')
+			.notNull()
+			.references(() => links.id, { onDelete: 'cascade' }),
+		tagId: text('tag_id')
+			.notNull()
+			.references(() => tags.id, { onDelete: 'cascade' })
+	},
+	(t) => [primaryKey({ columns: [t.linkId, t.tagId] }), index('link_tags_tag').on(t.tagId)]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
+export type Tag = typeof tags.$inferSelect;
