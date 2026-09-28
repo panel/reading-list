@@ -1,36 +1,114 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import Favicon from '$lib/components/Favicon.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
+	import { ignoreShortcut } from '$lib/keys';
+	import { toast } from '$lib/toast.svelte';
 
 	let { data } = $props();
 	const link = $derived(data.link);
 	const host = $derived(hostname(link.url));
+	const archived = $derived(link.status === 'archived');
+	const action = (name: string) => `${resolve('/links/[id]', { id: link.id })}?/${name}`;
+
+	// Lift toasts above this page's fixed action bar while it's shown.
+	$effect(() => {
+		toast.raised = true;
+		return () => (toast.raised = false);
+	});
+
+	let editing = $state(false);
+	let busy = $state(false);
+	let laterButton = $state<HTMLButtonElement>();
+	let finishButton = $state<HTMLButtonElement>();
+	let starForm = $state<HTMLFormElement>();
+
+	/** Finished / Later: offer Undo, then move on to the next item in the queue. */
+	const triage: SubmitFunction = () => {
+		busy = true;
+		const title = displayTitle(link);
+		return async ({ result, update }) => {
+			busy = false;
+			if (result.type !== 'success' || !result.data?.undo) return update();
+			toast.show({
+				message: `${result.data.done === 'finished' ? 'Finished' : 'Later'} · ${title}`,
+				undo: { id: link.id, state: result.data.undo }
+			});
+			const nextId = result.data.nextId as string | null;
+			await goto(nextId ? resolve('/links/[id]', { id: nextId }) : resolve('/'), {
+				invalidateAll: true
+			});
+		};
+	};
+
+	const withToast =
+		(message: (data: Record<string, unknown> | undefined) => string): SubmitFunction =>
+		() =>
+		async ({ result, update }) => {
+			await update({ reset: result.type === 'success' });
+			if (result.type === 'success') toast.show({ message: message(result.data) });
+			else if (result.type === 'failure')
+				toast.show({ message: String(result.data?.message ?? 'Something went wrong') });
+		};
+
+	async function copyLink() {
+		await navigator.clipboard.writeText(link.url);
+		toast.show({ message: 'Link copied' });
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		if (ignoreShortcut(event)) return;
+		const key = event.key.toLowerCase();
+		if (key === 'e' && !archived) finishButton?.form?.requestSubmit(finishButton);
+		else if (key === 'l' && !archived) laterButton?.form?.requestSubmit(laterButton);
+		else if (key === 's') starForm?.requestSubmit();
+		else if (key === 'j' && data.nextId) goto(resolve('/links/[id]', { id: data.nextId }));
+		else if (key === 'k' && data.prevId) goto(resolve('/links/[id]', { id: data.prevId }));
+		else if (key === 'o') window.open(link.url, '_blank', 'noopener,noreferrer');
+		else return;
+		event.preventDefault();
+	}
+
+	const barButton =
+		'flex h-12.5 items-center justify-center rounded-md border font-ui text-[0.9375rem] font-bold disabled:opacity-60';
+	const iconButton = `${barButton} w-12.5 shrink-0 border-rule-strong bg-paper text-ink hover:border-ink`;
+	const fieldClass =
+		'w-full rounded-md border border-rule-strong bg-surface px-3.5 text-[1.0625rem] text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none';
 </script>
 
 <svelte:head>
 	<title>{displayTitle(link)} · Reading List</title>
 </svelte:head>
 
-<div class="mx-auto flex max-w-xl flex-col gap-4.5 px-5.5 pt-4 lg:pt-10">
-	<a
-		href={resolve('/')}
-		class="-ml-1 flex h-11 w-fit items-center gap-1.5 kicker text-ink-2 hover:text-ink"
-	>
-		<svg
-			width="18"
-			height="18"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg
+<svelte:window {onkeydown} />
+
+<div class="mx-auto flex max-w-xl flex-col gap-4.5 px-5.5 pt-4 pb-24 lg:pt-10">
+	<div class="flex items-center justify-between">
+		<a
+			href={resolve(archived ? '/archive' : '/')}
+			class="-ml-1 flex h-11 w-fit items-center gap-1.5 kicker text-ink-2 hover:text-ink"
 		>
-		Queue
-	</a>
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg
+			>
+			{archived ? 'Archive' : 'Queue'}
+		</a>
+		<p class="hidden font-ui text-[0.8125rem] text-ink-3 lg:block">
+			<kbd>E</kbd> finished · <kbd>L</kbd> later · <kbd>S</kbd> star · <kbd>J</kbd>/<kbd>K</kbd> next/prev
+		</p>
+	</div>
 
 	{#if data.notice}
 		<p role="status" class="rounded-md bg-sunk px-4 py-3 font-ui text-[0.9375rem] text-ink">
@@ -40,16 +118,33 @@
 		</p>
 	{/if}
 
+	{#if archived}
+		<form
+			method="POST"
+			action={action('restore')}
+			use:enhance={withToast(() => 'Back in your queue')}
+			class="flex items-center justify-between gap-3 rounded-md bg-sunk px-4 py-2"
+		>
+			<span class="font-ui text-[0.9375rem] text-ink">
+				Finished {link.readAt ? relativeDay(link.readAt) : ''}
+			</span>
+			<button class="h-11 rounded-md px-2 font-ui text-sm font-bold text-accent hover:underline"
+				>Back to queue</button
+			>
+		</form>
+	{/if}
+
 	<a
 		href={link.url}
 		target="_blank"
 		rel="noopener noreferrer"
 		class="group flex flex-col overflow-hidden rounded-md border border-rule bg-surface"
 	>
-		<LinkImage {link} class="[container-type:inline-size] h-49 lg:h-64" />
+		<LinkImage {link} class="h-49 lg:h-64" />
 		<div class="flex flex-col gap-2 px-4.5 pt-4 pb-4.5">
 			<div class="flex items-center gap-2 kicker text-accent">
 				<Favicon src={link.faviconUrl} />{siteLabel(link)}
+				{#if link.isReference}<span class="text-ink-3">· ★ Reference</span>{/if}
 			</div>
 			<h1 class="headline text-[1.7rem] leading-[1.1] group-hover:text-accent-strong lg:text-4xl">
 				{displayTitle(link)}
@@ -83,22 +178,230 @@
 		>
 	</a>
 
-	<section class="flex flex-col gap-1.5 rounded-md bg-sunk px-4 py-3.5">
-		<h2 class="kicker text-[0.6875rem] text-accent">
-			Your note · saved {relativeDay(link.savedAt)}
-		</h2>
-		{#if link.note}
-			<p
-				class:dropcap={wantsDropCap(link.note)}
-				class="text-[1.0625rem] leading-[1.55] whitespace-pre-line"
+	<section
+		class="flex flex-col gap-2 rounded-md bg-sunk px-4 py-3.5"
+		aria-labelledby="note-heading"
+	>
+		<div class="flex items-center justify-between gap-3">
+			<h2 id="note-heading" class="kicker text-[0.6875rem] text-accent">
+				Your note · saved {relativeDay(link.savedAt)}
+			</h2>
+			{#if !editing}
+				<button
+					type="button"
+					onclick={() => (editing = true)}
+					class="-my-2 h-10 px-2 font-ui text-sm font-bold text-accent hover:underline">Edit</button
+				>
+			{/if}
+		</div>
+		{#if editing}
+			<form
+				method="POST"
+				action={action('edit')}
+				use:enhance={() => {
+					return async ({ result, update }) => {
+						await update({ reset: false });
+						if (result.type === 'success') {
+							editing = false;
+							toast.show({ message: 'Saved' });
+						}
+					};
+				}}
+				class="flex flex-col gap-3"
 			>
-				{link.note}
-			</p>
+				<label class="sr-only" for="edit-note">Note</label>
+				<textarea
+					id="edit-note"
+					name="note"
+					rows="5"
+					class="{fieldClass} resize-y py-3 leading-[1.55]">{link.note ?? ''}</textarea
+				>
+				<label for="edit-tags" class="kicker text-[0.6875rem] text-accent">Tags</label>
+				<input
+					id="edit-tags"
+					name="tags"
+					type="text"
+					autocomplete="off"
+					autocapitalize="none"
+					value={link.tags.join(', ')}
+					class="{fieldClass} h-12 font-ui"
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						onclick={() => (editing = false)}
+						class="h-11 rounded-md px-4 font-ui text-sm font-bold text-ink-2 hover:text-ink"
+						>Cancel</button
+					>
+					<button
+						class="h-11 rounded-md bg-ink px-5 font-ui text-sm font-bold text-paper hover:bg-accent-strong"
+						>Save</button
+					>
+				</div>
+			</form>
 		{:else}
-			<p class="text-base text-ink-3 italic">No note yet.</p>
-		{/if}
-		{#if link.tags.length}
-			<p class="font-ui text-[0.8125rem] text-ink-2">{link.tags.map((t) => `#${t}`).join('  ')}</p>
+			{#if link.note}
+				<p
+					class:dropcap={wantsDropCap(link.note)}
+					class="text-[1.0625rem] leading-[1.55] whitespace-pre-line"
+				>
+					{link.note}
+				</p>
+			{:else}
+				<p class="text-base text-ink-3 italic">No note yet.</p>
+			{/if}
+			{#if link.tags.length}
+				<p class="font-ui text-[0.8125rem] text-ink-2">
+					{link.tags.map((t) => `#${t}`).join('  ')}
+				</p>
+			{/if}
 		{/if}
 	</section>
+
+	<form
+		method="POST"
+		action={action('addNote')}
+		use:enhance={withToast(() => 'Note added')}
+		class="mt-4 flex flex-col gap-2.5 border-t-2 border-ink pt-4"
+	>
+		<label for="add-note" class="kicker text-accent">Your notes</label>
+		<textarea
+			id="add-note"
+			name="note"
+			rows="4"
+			required
+			placeholder="What stuck with you? Quotes, takeaways, who to send it to…"
+			class="{fieldClass} resize-y py-3 leading-[1.55]"></textarea>
+		<div class="flex items-center justify-between gap-3">
+			<span class="font-ui text-[0.8125rem] text-ink-3">Added to the note above</span>
+			<button
+				class="h-11 rounded-md border border-ink px-4.5 font-ui text-[0.9375rem] font-bold text-ink hover:bg-ink hover:text-paper"
+				>Save note</button
+			>
+		</div>
+	</form>
+
+	{#if data.next}
+		<section
+			class="mt-4 flex flex-col gap-3 border-t border-rule pt-3.5"
+			aria-labelledby="next-heading"
+		>
+			<h2 id="next-heading" class="kicker text-ink-2">
+				Up next{#if !archived}<span class="text-ink-3">
+						· Finished or Later takes you here</span
+					>{/if}
+			</h2>
+			<a href={resolve('/links/[id]', { id: data.next.id })} class="group flex gap-3.5">
+				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+					<span class="kicker text-[0.6875rem] text-accent">{siteLabel(data.next)}</span>
+					<span class="headline text-[1.375rem] leading-[1.15] group-hover:text-accent-strong"
+						>{displayTitle(data.next)}</span
+					>
+				</div>
+				<LinkImage link={data.next} class="h-21 w-21 shrink-0 rounded" />
+			</a>
+		</section>
+	{/if}
+
+	<form
+		method="POST"
+		action={action('delete')}
+		use:enhance={({ cancel }) => {
+			if (!confirm('Delete this link and its notes? This can’t be undone.')) return cancel();
+			return async ({ result, update }) => {
+				if (result.type === 'redirect') toast.show({ message: 'Deleted' });
+				await update();
+			};
+		}}
+		class="mt-6 flex justify-center"
+	>
+		<button
+			class="h-11 px-3 font-ui text-sm text-ink-3 underline-offset-2 hover:text-[#9b2c1f] hover:underline"
+			>Delete link</button
+		>
+	</form>
+</div>
+
+<!-- Action bar: sits above the mobile tab bar, at the bottom of the window on desktop. -->
+<div
+	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
+>
+	<div class="mx-auto flex max-w-xl gap-2 px-3.5 py-2.5">
+		{#if !archived}
+			<form method="POST" use:enhance={triage} class="flex flex-1">
+				<button
+					bind:this={laterButton}
+					formaction={action('later')}
+					disabled={busy}
+					class="{barButton} flex-1 border-rule-strong bg-paper text-accent hover:border-accent"
+					>Later</button
+				>
+			</form>
+		{/if}
+		<form
+			bind:this={starForm}
+			method="POST"
+			action={action('star')}
+			use:enhance={withToast((d) =>
+				d?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
+			)}
+		>
+			<input type="hidden" name="starred" value={String(!link.isReference)} />
+			<button
+				aria-label={link.isReference ? 'Unstar' : 'Star as reference'}
+				aria-pressed={link.isReference}
+				class="{iconButton} {link.isReference ? 'text-accent' : ''}"
+			>
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill={link.isReference ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" /></svg
+				>
+			</button>
+		</form>
+		<button type="button" onclick={copyLink} aria-label="Copy link" class={iconButton}>
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+				><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path
+					d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"
+				/></svg
+			>
+		</button>
+		{#if archived}
+			<form
+				method="POST"
+				action={action('restore')}
+				use:enhance={withToast(() => 'Back in your queue')}
+				class="flex flex-[2.3]"
+			>
+				<button class="{barButton} flex-1 border-ink bg-ink text-paper hover:bg-accent-strong"
+					>Back to queue</button
+				>
+			</form>
+		{:else}
+			<form method="POST" use:enhance={triage} class="flex flex-[1.3]">
+				<button
+					bind:this={finishButton}
+					formaction={action('finish')}
+					disabled={busy}
+					class="{barButton} flex-1 border-ink bg-ink text-paper hover:bg-accent-strong"
+					>Finished</button
+				>
+			</form>
+		{/if}
+	</div>
 </div>

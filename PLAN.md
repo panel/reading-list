@@ -208,6 +208,13 @@ pipeline.
 - Keyboard shortcuts (`j`/`k`, `e` archive, `s` star).
 - **Done when:** the queue can go from 10 items to 0 in one sitting, and each
   one is still findable afterwards.
+- **Status:** built. Swipe (right = Finished, left = Later) on the mobile card,
+  with Later / Read now / Finished buttons as well. Undo toast restores the exact
+  previous queue position. The saved-link page has a Later / Star / Copy link /
+  Finished bar that moves on to the next item, plus note editing (replace), a
+  "Your notes" box (append), tags, and delete. There's an Archive page with
+  Requeue. Keyboard: `E`/`L`/`S`/`O` on the queue, plus `J`/`K` on a link.
+  Migration 0003 adds `starred_at`.
 
 ### Slice 4: Subscribe to a feed (manual refresh)
 *"Add an author and see their recent posts."*

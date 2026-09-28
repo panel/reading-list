@@ -62,6 +62,8 @@ export const links = sqliteTable(
 			.default(sql`0`)
 			.$defaultFn(() => new Date()),
 		readAt: timestamp('read_at'),
+		// When it was starred as a reference; orders the Library.
+		starredAt: timestamp('starred_at'),
 		updatedAt: timestampNow('updated_at')
 	},
 	(t) => [

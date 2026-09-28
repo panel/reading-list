@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseCanonical, mergeNote } from './links';
+import { chooseCanonical, mergeNote, parseQueueState } from './links';
 
 describe('chooseCanonical', () => {
 	it('uses the page canonical on the same site', () => {
@@ -39,5 +39,29 @@ describe('mergeNote', () => {
 	it('appends a different note and skips a repeat', () => {
 		expect(mergeNote('first', 'second')).toBe('first\n\nsecond');
 		expect(mergeNote('first\n\nsecond', 'second')).toBe('first\n\nsecond');
+	});
+});
+
+describe('parseQueueState', () => {
+	it('accepts a queued or archived state from form fields', () => {
+		expect(parseQueueState({ status: 'queued', queuedAt: '1700000000000', readAt: '' })).toEqual({
+			status: 'queued',
+			queuedAt: 1700000000000,
+			readAt: null
+		});
+		expect(parseQueueState({ status: 'archived', queuedAt: '1', readAt: '1700000000001' })).toEqual(
+			{ status: 'archived', queuedAt: 1, readAt: 1700000000001 }
+		);
+	});
+
+	it.each([
+		{ status: 'deleted', queuedAt: '1', readAt: '' },
+		{ status: 'queued', queuedAt: 'soon', readAt: '' },
+		{ status: 'queued', queuedAt: '-5', readAt: '' },
+		{ status: 'queued', queuedAt: '1.5', readAt: '' },
+		{ status: 'queued', queuedAt: '1', readAt: 'x' },
+		{ status: null, queuedAt: null, readAt: null }
+	])('rejects %j', (input) => {
+		expect(parseQueueState(input)).toBeNull();
 	});
 });

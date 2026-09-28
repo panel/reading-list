@@ -9,12 +9,14 @@
 	import './layout.css';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
+	import Toast from '$lib/components/Toast.svelte';
 
 	let { children } = $props();
 
 	const tabs = [
 		{ href: resolve('/'), label: 'Queue', icon: 'M6 3h12v18l-6-4-6 4z' },
 		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
+		{ href: resolve('/archive'), label: 'Archive', icon: 'M3 8h18v12H3zM5 4h14l2 4H3zM10 12h4' },
 		{
 			href: resolve('/settings'),
 			label: 'Settings',
@@ -50,6 +52,13 @@
 						: 'border-transparent text-ink-2 hover:text-ink'}">Queue</a
 				>
 				<a
+					href={resolve('/archive')}
+					aria-current={isActive(resolve('/archive')) ? 'page' : undefined}
+					class="border-b-2 py-1.5 {isActive(resolve('/archive'))
+						? 'border-accent text-ink'
+						: 'border-transparent text-ink-2 hover:text-ink'}">Archive</a
+				>
+				<a
 					href={resolve('/settings')}
 					aria-current={isActive(resolve('/settings')) ? 'page' : undefined}
 					class="border-b-2 py-1.5 {isActive(resolve('/settings'))
@@ -69,6 +78,8 @@
 	<main class="flex-1 pb-20 lg:pb-12">
 		{@render children()}
 	</main>
+
+	<Toast />
 
 	<nav
 		aria-label="Sections"
