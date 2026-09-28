@@ -14,7 +14,12 @@
 
 	const tabs = [
 		{ href: resolve('/'), label: 'Queue', icon: 'M6 3h12v18l-6-4-6 4z' },
-		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' }
+		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
+		{
+			href: resolve('/settings'),
+			label: 'Settings',
+			icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4'
+		}
 	];
 	const isActive = (href: string) =>
 		href === resolve('/')
@@ -43,6 +48,13 @@
 					class="border-b-2 py-1.5 {isActive('/')
 						? 'border-accent text-ink'
 						: 'border-transparent text-ink-2 hover:text-ink'}">Queue</a
+				>
+				<a
+					href={resolve('/settings')}
+					aria-current={isActive(resolve('/settings')) ? 'page' : undefined}
+					class="border-b-2 py-1.5 {isActive(resolve('/settings'))
+						? 'border-accent text-ink'
+						: 'border-transparent text-ink-2 hover:text-ink'}">Settings</a
 				>
 			</nav>
 			<div class="flex-1"></div>

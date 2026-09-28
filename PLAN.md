@@ -196,6 +196,10 @@ pipeline.
   it.)
 - **Done when:** sharing from Chrome on your iPhone adds the link, with a note
   and tags, to the queue.
+- **Status:** built. The bookmarklet was dropped (not needed). Tokens are stored
+  as SHA-256 hashes with a `links:write` scope. `last_used_at` refreshes at most
+  hourly to save D1 writes. The Shortcut steps are in `docs/ios-shortcut.md`,
+  and the Access bypass in `docs/setup.md` step 4.
 
 ### Slice 3: Queue workflow
 *"Actually work through the reading list."*

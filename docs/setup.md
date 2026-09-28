@@ -76,7 +76,24 @@ app refuses every request with a 500.
    The app checks the Access JWT on every request and rejects anything without
    a valid one, so it stays closed even if Access were misconfigured.
 
-4. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
+4. **Let the API through Access** (for the iOS Shortcut). <a id="let-the-api-through-access"></a>
+   `/api/*` authenticates with the app's own tokens (Settings → API tokens),
+   so Access must not ask for a login there. In the Zero Trust dashboard, go
+   to Access → Applications → Add an application → Self-hosted:
+   - Application name: `Reading List API`
+   - Domain: subdomain `reader`, domain `nelsonfamily.fyi`, path `api/`
+   - Policy: action **Bypass**, Include → **Everyone**
+
+   Access applies the most specific path, so everything outside `/api/` still
+   requires login. The app enforces this on its side too: a token works only
+   on `/api/*`, and `/api/*` never accepts anything but a token.
+
+   Check it: `curl -i -X POST https://reader.nelsonfamily.fyi/api/links`
+   should return `401` with `{"ok":false,"message":"Missing or invalid API
+   token"}` from the app. If you see an Access login page instead, the bypass
+   isn't active yet.
+
+5. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
    API Tokens → Create Token → "Edit Cloudflare Workers" template, then add
    **Account → D1 → Edit**). In the GitHub repo settings:
    - Secrets → Actions: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`

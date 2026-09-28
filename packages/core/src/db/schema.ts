@@ -99,7 +99,31 @@ export const linkTags = sqliteTable(
 	(t) => [primaryKey({ columns: [t.linkId, t.tagId] }), index('link_tags_tag').on(t.tagId)]
 );
 
+/**
+ * Bearer tokens for the JSON API (iOS Shortcuts, agents). Only a SHA-256 hash
+ * is stored; the token itself is shown once, when it's created.
+ */
+export const apiTokens = sqliteTable(
+	'api_tokens',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		tokenHash: text('token_hash').notNull().unique(),
+		// First characters of the token, so you can tell tokens apart in the list.
+		tokenPrefix: text('token_prefix').notNull(),
+		// Space-separated, e.g. "links:write". See apps/web/src/lib/server/tokens.ts.
+		scopes: text('scopes').notNull(),
+		lastUsedAt: timestamp('last_used_at'),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [index('api_tokens_user').on(t.userId)]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
+export type ApiToken = typeof apiTokens.$inferSelect;

@@ -1,6 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
-import type { Db, User } from '@reading-list/core/db';
+import type { ApiToken, Db, User } from '@reading-list/core/db';
 
 declare global {
 	namespace App {
@@ -14,6 +14,8 @@ declare global {
 		interface Locals {
 			db: Db;
 			user: User;
+			/** Set on /api/* requests, which authenticate with a bearer token. */
+			apiToken?: ApiToken;
 		}
 
 		// interface Error {}
