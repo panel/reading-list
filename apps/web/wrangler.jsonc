@@ -25,19 +25,13 @@
 		{
 			"binding": "DB",
 			"database_name": "reading-list",
-			// Replace with the id printed by `wrangler d1 create reading-list` (see docs/setup.md).
 			"database_id": "4c01c8e0-d3c7-45ff-90f5-5f77365b674e",
 			"migrations_dir": "../../migrations"
-		},
-		{
-			"binding": "reading_list",
-			"database_name": "reading-list",
-			"database_id": "4c01c8e0-d3c7-45ff-90f5-5f77365b674e"
 		}
 	],
 	"vars": {
-		// e.g. "https://yourteam.cloudflareaccess.com" (see docs/setup.md)
-		"ACCESS_TEAM_DOMAIN": "abbyandpaulnelson.cloudflareaccess.com",
+		// Zero Trust team domain (see docs/setup.md)
+		"ACCESS_TEAM_DOMAIN": "https://abbyandpaulnelson.cloudflareaccess.com",
 		// The Application Audience (AUD) tag from the Access application
 		"ACCESS_AUD": "698fd1bbe8ac62dd487848814c2388bfe85d99b05a0eafc4c6d29b06a04dd987",
 		// Local development only; set it in .dev.vars. Ignored in production builds.

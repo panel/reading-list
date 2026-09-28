@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { verifyAccessJwt } from './access';
+import { normalizeTeamDomain, verifyAccessJwt } from './access';
 
 const config = { teamDomain: 'https://team.cloudflareaccess.com', aud: 'app-aud' };
 
@@ -63,5 +63,17 @@ describe('verifyAccessJwt', () => {
 		const { keys, sign } = await setup();
 		const token = await sign({ common_name: 'svc' });
 		expect(await verifyAccessJwt(token, config, keys)).toBeNull();
+	});
+});
+
+describe('normalizeTeamDomain', () => {
+	it.each([
+		'team.cloudflareaccess.com',
+		'https://team.cloudflareaccess.com',
+		'https://team.cloudflareaccess.com/',
+		'http://team.cloudflareaccess.com',
+		'  team.cloudflareaccess.com  '
+	])('normalizes %j', (input) => {
+		expect(normalizeTeamDomain(input)).toBe('https://team.cloudflareaccess.com');
 	});
 });

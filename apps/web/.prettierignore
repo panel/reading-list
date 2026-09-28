@@ -11,3 +11,6 @@ bun.lockb
 
 # Generated
 worker-configuration.d.ts
+
+# Rewritten by wrangler when it edits config (e.g. `d1 create`)
+wrangler.jsonc

@@ -9,6 +9,17 @@ export interface AccessConfig {
 	aud: string;
 }
 
+/**
+ * Accepts the team domain with or without the scheme or a trailing slash and
+ * returns it in the exact form Access uses as the JWT issuer.
+ */
+export function normalizeTeamDomain(teamDomain: string): string {
+	const trimmed = teamDomain.trim().replace(/\/+$/, '');
+	return /^https?:\/\//i.test(trimmed)
+		? trimmed.replace(/^http:/i, 'https:')
+		: `https://${trimmed}`;
+}
+
 // Kept per isolate so the signing keys are fetched once, not on every request.
 const keySets = new Map<string, JWTVerifyGetKey>();
 
