@@ -61,7 +61,7 @@ function resolveHttpUrl(value: string | undefined | null, base: string): string 
 
 const ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 
-function parseAttributes(source: string): Record<string, string> {
+export function parseAttributes(source: string): Record<string, string> {
 	const attributes: Record<string, string> = {};
 	for (const match of source.matchAll(ATTRIBUTE)) {
 		const name = match[1].toLowerCase();

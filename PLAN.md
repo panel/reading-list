@@ -224,6 +224,17 @@ pipeline.
 - A "Refresh" button fetches right away (there's no cron yet).
 - Feed inbox: entries from your subscriptions, unread first.
 - **Done when:** you subscribe to 3 authors and see their posts.
+- **Status:** built. The parser (`packages/core/src/feeds`) handles RSS 2.0, RSS 1.0/RDF,
+  Atom and JSON Feed, with fixture tests. Discovery goes: feed URL → the page's advertised
+  `<link rel=alternate>` → common paths (`/feed`, `/rss.xml`, …), and falls back to
+  http when you type no scheme and https fails. Refreshes use conditional GET and back
+  off on errors. Posts are read in-app: the HTML is sanitized server-side (an
+  allowlist via `xss`, and only http(s) URLs) and the whole app now sends a strict
+  CSP. Opening a post marks it read, via a POST from the page, so hover-preloading
+  doesn't count. Up to 50 entries per fetch; content capped at 400 KB.
+  Migration 0004 adds `feeds`, `subscriptions`, `feed_entries` and `entry_state`.
+  **Watch:** parsing a very large feed may exceed the Workers Free 10 ms CPU limit;
+  slice 5's one-feed-per-invocation design exists for exactly this.
 
 ### Slice 5: Automatic polling
 *"New posts show up without me doing anything."*

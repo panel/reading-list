@@ -15,6 +15,11 @@
 
 	const tabs = [
 		{ href: resolve('/'), label: 'Queue', icon: 'M6 3h12v18l-6-4-6 4z' },
+		{
+			href: resolve('/feeds'),
+			label: 'Feeds',
+			icon: 'M5 5a14 14 0 0 1 14 14M5 11a8 8 0 0 1 8 8M6 18h.01'
+		},
 		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
 		{ href: resolve('/archive'), label: 'Archive', icon: 'M3 8h18v12H3zM5 4h14l2 4H3zM10 12h4' },
 		{
@@ -26,7 +31,9 @@
 	const isActive = (href: string) =>
 		href === resolve('/')
 			? page.url.pathname === '/' || page.url.pathname.startsWith('/links')
-			: page.url.pathname.startsWith(href);
+			: href === resolve('/feeds')
+				? page.url.pathname.startsWith(href) || page.url.pathname.startsWith('/entries')
+				: page.url.pathname.startsWith(href);
 </script>
 
 <svelte:head>
@@ -50,6 +57,13 @@
 					class="border-b-2 py-1.5 {isActive('/')
 						? 'border-accent text-ink'
 						: 'border-transparent text-ink-2 hover:text-ink'}">Queue</a
+				>
+				<a
+					href={resolve('/feeds')}
+					aria-current={isActive(resolve('/feeds')) ? 'page' : undefined}
+					class="border-b-2 py-1.5 {isActive(resolve('/feeds'))
+						? 'border-accent text-ink'
+						: 'border-transparent text-ink-2 hover:text-ink'}">Feeds</a
 				>
 				<a
 					href={resolve('/archive')}

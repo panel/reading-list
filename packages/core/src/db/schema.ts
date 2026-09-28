@@ -102,6 +102,85 @@ export const linkTags = sqliteTable(
 );
 
 /**
+ * One row per feed URL, shared by everyone subscribed to it, so a popular
+ * feed is fetched once however many people follow it.
+ */
+export const feeds = sqliteTable(
+	'feeds',
+	{
+		id: id(),
+		url: text('url').notNull().unique(),
+		siteUrl: text('site_url'),
+		title: text('title'),
+		description: text('description'),
+		// Conditional GET validators from the last successful fetch.
+		etag: text('etag'),
+		lastModified: text('last_modified'),
+		lastFetchedAt: timestamp('last_fetched_at'),
+		nextFetchAt: timestamp('next_fetch_at'),
+		errorCount: integer('error_count').notNull().default(0),
+		lastError: text('last_error'),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [index('feeds_next_fetch').on(t.nextFetchAt)]
+);
+
+export const subscriptions = sqliteTable(
+	'subscriptions',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		feedId: text('feed_id')
+			.notNull()
+			.references(() => feeds.id, { onDelete: 'cascade' }),
+		titleOverride: text('title_override'),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.feedId] }), index('subscriptions_feed').on(t.feedId)]
+);
+
+export const feedEntries = sqliteTable(
+	'feed_entries',
+	{
+		id: id(),
+		feedId: text('feed_id')
+			.notNull()
+			.references(() => feeds.id, { onDelete: 'cascade' }),
+		guid: text('guid').notNull(),
+		url: text('url'),
+		title: text('title'),
+		author: text('author'),
+		summary: text('summary'),
+		// Raw HTML as published; sanitized when rendered.
+		content: text('content'),
+		imageUrl: text('image_url'),
+		publishedAt: timestamp('published_at'),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [
+		uniqueIndex('feed_entries_feed_guid').on(t.feedId, t.guid),
+		index('feed_entries_feed_published').on(t.feedId, t.publishedAt)
+	]
+);
+
+/** Per-user read state for feed entries. No row = unread. */
+export const entryState = sqliteTable(
+	'entry_state',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		entryId: text('entry_id')
+			.notNull()
+			.references(() => feedEntries.id, { onDelete: 'cascade' }),
+		readAt: timestamp('read_at'),
+		dismissedAt: timestamp('dismissed_at')
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.entryId] })]
+);
+
+/**
  * Bearer tokens for the JSON API (iOS Shortcuts, agents). Only a SHA-256 hash
  * is stored; the token itself is shown once, when it's created.
  */
@@ -129,3 +208,5 @@ export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type ApiToken = typeof apiTokens.$inferSelect;
+export type Feed = typeof feeds.$inferSelect;
+export type FeedEntry = typeof feedEntries.$inferSelect;

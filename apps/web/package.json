@@ -47,6 +47,7 @@
 		"@fontsource/atkinson-hyperlegible": "^5.3.0",
 		"@reading-list/core": "workspace:*",
 		"drizzle-orm": "^0.45.2",
-		"jose": "^6.2.12"
+		"jose": "^6.2.12",
+		"xss": "^1.0.15"
 	}
 }
