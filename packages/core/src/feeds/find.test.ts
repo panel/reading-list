@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findFeed, FeedNotFoundError } from './refresh';
+import { findFeed, FeedNotFoundError, pollInterval } from './refresh';
 
 const RSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>Blog</title><link>https://site.test/</link>
 <item><title>Post</title><link>https://site.test/p</link><guid>1</guid></item></channel></rss>`;
@@ -91,5 +91,19 @@ describe('findFeed', () => {
 				throw new TypeError('fetch failed');
 			}) as typeof fetch)
 		).rejects.toThrow('Couldn’t reach down.test');
+	});
+});
+
+describe('pollInterval', () => {
+	const now = new Date('2026-09-28T12:00:00Z');
+	const ago = (hours: number) => new Date(now.getTime() - hours * 3600_000);
+	it.each([
+		[ago(2), 30],
+		[ago(30), 60],
+		[ago(24 * 10), 180],
+		[ago(24 * 90), 360],
+		[null, 360]
+	])('latest post %s → every %i minutes', (latest, minutes) => {
+		expect(pollInterval(latest, now)).toBe(minutes * 60_000);
 	});
 });

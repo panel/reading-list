@@ -46,5 +46,7 @@ jobs:
       - run: pnpm build
       - name: Apply D1 migrations
         run: pnpm --filter web db:migrate:remote
-      - name: Deploy
+      - name: Deploy web app
         run: pnpm --filter web exec wrangler deploy
+      - name: Deploy feed fetcher
+        run: pnpm --filter fetcher exec wrangler deploy

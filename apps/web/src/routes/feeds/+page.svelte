@@ -9,6 +9,7 @@
 	let refreshing = $state(false);
 
 	const current = $derived(data.feeds.find((f) => f.id === data.feedId));
+	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const summary = $derived(
 		[
 			`${data.inbox.unread} unread`,
@@ -73,6 +74,15 @@
 			>
 		</div>
 	</header>
+
+	{#if failing.length}
+		<p role="status" class="mt-4 rounded-md bg-sunk px-4 py-3 font-ui text-[0.9375rem] text-ink">
+			{failing.length === 1
+				? `${failing[0].title} keeps failing to update.`
+				: `${failing.length} feeds keep failing to update.`}
+			<a href={resolve('/feeds/manage')} class="font-bold text-accent hover:underline">See why</a>
+		</p>
+	{/if}
 
 	{#if data.feeds.length > 1}
 		<nav aria-label="Filter by feed" class="-mx-5 overflow-x-auto px-5">

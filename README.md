@@ -10,5 +10,6 @@ Cloudflare Workers + D1 (free tier).
 ```
 apps/web/        SvelteKit app (UI + API), deployed as a Worker
 packages/core/   Shared schema, types, and logic (no Cloudflare runtime deps)
+workers/fetcher/ Cron Worker: polls feeds every 15 minutes
 migrations/      D1 SQL migrations, generated from packages/core/src/db/schema.ts
 ```

@@ -1,0 +1,24 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "reading-list-fetcher",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-28",
+	// Not reachable from the internet: no workers.dev URL, no routes. It runs on
+	// the cron below and is called only by itself, through the SELF binding.
+	"workers_dev": false,
+	"preview_urls": false,
+	"triggers": { "crons": ["*/15 * * * *"] },
+	"observability": { "enabled": true },
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "reading-list",
+			"database_id": "4c01c8e0-d3c7-45ff-90f5-5f77365b674e",
+			// Migrations are applied from apps/web; this points at the same files.
+			"migrations_dir": "../../migrations"
+		}
+	],
+	// Each due feed is fetched in its own invocation through this binding, so a
+	// large feed gets a fresh CPU budget instead of sharing the cron's.
+	"services": [{ "binding": "SELF", "service": "reading-list-fetcher" }]
+}

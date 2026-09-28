@@ -1,0 +1,25 @@
+{
+	"name": "fetcher",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "wrangler dev --test-scheduled --persist-to ../../apps/web/.wrangler/state",
+		"gen": "wrangler types --strict-vars=false",
+		"check": "pnpm gen && tsc --noEmit",
+		"lint": "prettier --check .",
+		"format": "prettier --write .",
+		"test": "vitest --run",
+		"deploy": "wrangler deploy"
+	},
+	"dependencies": {
+		"@reading-list/core": "workspace:*",
+		"drizzle-orm": "^0.45.3"
+	},
+	"devDependencies": {
+		"prettier": "^3.9.9",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.11",
+		"wrangler": "^4.142.0"
+	}
+}

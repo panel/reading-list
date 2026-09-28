@@ -253,6 +253,15 @@ pipeline.
 - Unread counts per feed in the sidebar.
 - **Done when:** a new post from a followed author shows up within ~15 min
   and nobody pressed anything.
+- **Status:** built. `workers/fetcher` runs on a `*/15` cron. It selects up to 40 due
+  feeds that have at least one subscriber and dispatches each to `/poll/:id` on
+  itself via the `SELF` service binding (no public routes). Check interval: every
+  30 min if the feed posted in the last day, 1 h within a week, 3 h within a month,
+  6 h otherwise. Errors back off exponentially up to 24 h. Unread count shows in the
+  nav (last 60 days), and the Feeds page flags feeds failing 3+ times. Tested locally
+  by driving the Worker's `scheduled()`/`fetch()` against the local D1: new posts were
+  picked up, intervals adapted, unchanged feeds returned 304, and a second tick found
+  nothing due.
 
 ### Slice 6: Entry → queue / reference
 *"This is where the three jobs connect."*

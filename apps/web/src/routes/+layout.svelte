@@ -11,7 +11,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Toast from '$lib/components/Toast.svelte';
 
-	let { children } = $props();
+	let { children, data } = $props();
+	const badge = (n: number) => (n > 99 ? '99+' : String(n));
 
 	const tabs = [
 		{ href: resolve('/'), label: 'Queue', icon: 'M6 3h12v18l-6-4-6 4z' },
@@ -63,7 +64,9 @@
 					aria-current={isActive(resolve('/feeds')) ? 'page' : undefined}
 					class="border-b-2 py-1.5 {isActive(resolve('/feeds'))
 						? 'border-accent text-ink'
-						: 'border-transparent text-ink-2 hover:text-ink'}">Feeds</a
+						: 'border-transparent text-ink-2 hover:text-ink'}"
+					>Feeds{#if data.unread}<span class="ml-1.5 text-accent">{badge(data.unread)}</span
+						>{/if}</a
 				>
 				<a
 					href={resolve('/archive')}
@@ -103,7 +106,7 @@
 			<a
 				href={tab.href}
 				aria-current={isActive(tab.href) ? 'page' : undefined}
-				class="flex flex-1 flex-col items-center justify-center gap-0.5 font-ui text-xs {isActive(
+				class="relative flex flex-1 flex-col items-center justify-center gap-0.5 font-ui text-xs {isActive(
 					tab.href
 				)
 					? 'font-bold text-ink'
@@ -121,6 +124,12 @@
 					aria-hidden="true"><path d={tab.icon} /></svg
 				>
 				{tab.label}
+				{#if tab.label === 'Feeds' && data.unread}
+					<span
+						class="absolute top-1.5 left-1/2 ml-2 min-w-4.5 rounded-full bg-accent px-1 text-center text-[0.6875rem] leading-4.5 font-bold text-paper"
+						aria-label="{data.unread} unread">{badge(data.unread)}</span
+					>
+				{/if}
 			</a>
 		{/each}
 	</nav>

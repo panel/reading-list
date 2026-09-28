@@ -14,7 +14,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		feeds: subs.map(({ feed, titleOverride, unread }) => ({
 			id: feed.id,
 			title: feedTitle(feed, titleOverride),
-			unread: Number(unread)
+			unread: Number(unread),
+			failing: feed.errorCount >= 3
 		}))
 	};
 };

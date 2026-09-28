@@ -98,7 +98,22 @@ app refuses every request with a 500.
    token"}` from the app. If you see an Access login page instead, the bypass
    isn't active yet.
 
-5. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
+5. **Deploy the feed fetcher** (Slice 5). A second Worker, `reading-list-fetcher`,
+   runs every 15 minutes and checks feeds for new posts. It has no URL of its
+   own and shares the same D1 database.
+
+   ```sh
+   pnpm --filter fetcher exec wrangler deploy
+   ```
+
+   It calls itself through a service binding (`SELF`), so each feed gets its
+   own invocation and CPU budget. If the very first deploy complains that the
+   `reading-list-fetcher` service doesn't exist yet, remove the `services`
+   entry from `workers/fetcher/wrangler.jsonc`, deploy once, put it back and
+   deploy again. Check it's running under Workers & Pages →
+   reading-list-fetcher → Logs; each run logs `{"polled":…,"newEntries":…,"failed":…}`.
+
+6. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
    API Tokens → Create Token → "Edit Cloudflare Workers" template, then add
    **Account → D1 → Edit**). In the GitHub repo settings:
    - Secrets → Actions: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
@@ -108,7 +123,7 @@ app refuses every request with a 500.
    read secrets when deciding whether to run the deploy job.
 
    Commit the `wrangler.jsonc` changes from steps 1 and 3. Every push to
-   `main` then runs checks, applies migrations, and deploys.
+   `main` then runs checks, applies migrations, and deploys both Workers.
 
 ## Troubleshooting
 

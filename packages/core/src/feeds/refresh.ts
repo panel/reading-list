@@ -10,11 +10,34 @@ const USER_AGENT =
 const TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const BASE_INTERVAL_MS = 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
 // D1 allows 100 bound parameters per statement; an entry insert binds 10.
 const ENTRY_ROWS_PER_INSERT = 9;
 
 export class FeedNotFoundError extends Error {}
+
+/**
+ * How long to wait before checking a feed again, from how recently it last
+ * published: active feeds every 30 minutes, quiet ones a few times a day.
+ */
+export function pollInterval(latestEntryAt: Date | null, now = new Date()): number {
+	if (!latestEntryAt) return 6 * HOUR;
+	const age = now.getTime() - latestEntryAt.getTime();
+	if (age < DAY) return HOUR / 2;
+	if (age < 7 * DAY) return HOUR;
+	if (age < 30 * DAY) return 3 * HOUR;
+	return 6 * HOUR;
+}
+
+async function latestEntryAt(db: Db, feedId: string): Promise<Date | null> {
+	const [row] = await db
+		.select({ latest: sql<number | null>`max(${feedEntries.publishedAt})` })
+		.from(feedEntries)
+		.where(eq(feedEntries.feedId, feedId));
+	return row?.latest ? new Date(row.latest) : null;
+}
 
 type FetchFn = typeof fetch;
 
@@ -160,6 +183,12 @@ export async function ingestEntries(db: Db, feedId: string, parsed: ParsedFeed):
 	return results.reduce((n, inserted) => n + inserted.length, 0);
 }
 
+const newestEntry = (parsed: ParsedFeed): Date | null =>
+	parsed.entries.reduce<Date | null>(
+		(newest, e) => (e.publishedAt && (!newest || e.publishedAt > newest) ? e.publishedAt : newest),
+		null
+	);
+
 const feedDetails = (parsed: ParsedFeed) => ({
 	...(parsed.title && { title: parsed.title }),
 	...(parsed.siteUrl && { siteUrl: parsed.siteUrl }),
@@ -176,7 +205,7 @@ export async function upsertFeed(db: Db, found: FoundFeed, now = new Date()) {
 			etag: found.etag,
 			lastModified: found.lastModified,
 			lastFetchedAt: now,
-			nextFetchAt: new Date(now.getTime() + BASE_INTERVAL_MS)
+			nextFetchAt: new Date(now.getTime() + pollInterval(newestEntry(found.parsed), now))
 		})
 		.onConflictDoUpdate({ target: feeds.url, set: { ...feedDetails(found.parsed) } })
 		.returning();
@@ -211,7 +240,7 @@ export async function refreshFeed(
 				.update(feeds)
 				.set({
 					lastFetchedAt: now,
-					nextFetchAt: scheduleNext(BASE_INTERVAL_MS),
+					nextFetchAt: scheduleNext(pollInterval(await latestEntryAt(db, feed.id), now)),
 					errorCount: 0,
 					lastError: null
 				})
@@ -232,7 +261,7 @@ export async function refreshFeed(
 				etag: response.headers.get('etag'),
 				lastModified: response.headers.get('last-modified'),
 				lastFetchedAt: now,
-				nextFetchAt: scheduleNext(BASE_INTERVAL_MS),
+				nextFetchAt: scheduleNext(pollInterval(await latestEntryAt(db, feed.id), now)),
 				errorCount: 0,
 				lastError: null
 			})

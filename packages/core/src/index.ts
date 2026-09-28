@@ -19,6 +19,7 @@ export {
 	findFeed,
 	upsertFeed,
 	refreshFeed,
+	pollInterval,
 	ingestEntries,
 	FeedNotFoundError,
 	type FoundFeed,

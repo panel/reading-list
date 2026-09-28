@@ -99,3 +99,28 @@ export async function nextUnread(db: Db, userId: string, excludeId: string) {
 		.limit(1);
 	return next ?? null;
 }
+
+const UNREAD_WINDOW_DAYS = 60;
+
+/**
+ * Unread posts across the user's feeds, for the navigation badge. Limited to
+ * the last 60 days so it stays a cheap query on every page load.
+ */
+export async function unreadCount(db: Db, userId: string): Promise<number> {
+	const since = Date.now() - UNREAD_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+	const [row] = await db
+		.select({ n: sql<number>`count(*)` })
+		.from(feedEntries)
+		.innerJoin(
+			subscriptions,
+			and(eq(subscriptions.feedId, feedEntries.feedId), eq(subscriptions.userId, userId))
+		)
+		.leftJoin(
+			entryState,
+			and(eq(entryState.entryId, feedEntries.id), eq(entryState.userId, userId))
+		)
+		.where(
+			and(isNull(entryState.readAt), isNull(entryState.dismissedAt), sql`${entryDate} >= ${since}`)
+		);
+	return Number(row?.n ?? 0);
+}
