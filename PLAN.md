@@ -63,7 +63,7 @@ schema is plain SQLite, so that stays possible.
 | Limit (Workers Free) | Impact | Design response |
 | --- | --- | --- |
 | **10 ms CPU** per invocation (waiting on network doesn't count) | Parsing a big feed or running readability on a long article can go over | Parse feeds one per invocation (fan out); get metadata with streaming `HTMLRewriter`; leave full-text extraction until later and keep it optional |
-| **50 subrequests** per invocation | One cron run can't fetch 200 feeds | The cron picks the N feeds that are due most, fetches ≤ ~40, and the rest wait for the next tick. Or it fans out through a service binding so each call gets its own budget |
+| **50 subrequests** per invocation | Caps how many feeds one cron run can touch | At ≤100 feeds this isn't a problem: ~25 feeds come due per 15-minute tick (see Slice 5) |
 | **100k requests/day** | More than enough for one person | — |
 | **D1: 5M rows read / 100k rows written per day, 5 GB** | Unindexed scans and FTS rebuilds count against reads | Index every query path; prune old unsaved feed entries; use conditional GET so an unchanged feed writes nothing |
 | **5 cron triggers** per account | Fine | One trigger (e.g. every 15 min); per-feed `next_fetch_at` decides what actually gets fetched |
@@ -84,7 +84,8 @@ double the fetches.
 
 ```sql
 users          (id, email UNIQUE, created_at)
-api_tokens     (id, user_id, name, token_hash, last_used_at, created_at)   -- for bookmarklet / phone capture
+api_tokens     (id, user_id, name, token_hash, scopes, last_used_at, created_at)
+               -- for iOS Shortcuts, the bookmarklet, and agents; scopes e.g. 'links:write', 'read'
 
 feeds          (id, url UNIQUE, site_url, title, etag, last_modified,
                 last_fetched_at, next_fetch_at, error_count, last_error)
@@ -107,6 +108,9 @@ links_fts      -- FTS5 over title, description, note, site_name, author, tag nam
 
 Decisions baked in:
 
+- **IDs are ULIDs** (text primary keys) on every table except join tables.
+  They sort by time, can't be guessed, and are safe to put in a public URL if
+  share pages ever happen. They cost nothing now.
 - **`feed_entries` and `links` are separate tables.** Entries are high volume and
   disposable, so unsaved ones older than N days get pruned. Links are curated
   and kept forever. Saving an entry copies it into `links` with a pointer back.
@@ -126,7 +130,8 @@ pipeline.
 - pnpm monorepo: `apps/web` (SvelteKit), `workers/fetcher`, `packages/core`
   (schema, types, shared logic such as URL canonicalization and feed parsing).
 - `wrangler.toml` with a D1 binding and a first migration (`users`, `links`).
-- Cloudflare Access app on the domain; `hooks.server.ts` verifies the Access JWT
+- App on a subdomain of your custom domain (e.g. `read.yourdomain.com`), with a
+  Cloudflare Access application protecting it; `hooks.server.ts` verifies the Access JWT
   and upserts the user into `locals.user`.
 - GitHub Action: typecheck, test, migrate, deploy on push to `main`.
 - **Done when:** visiting the URL asks you to log in and then shows "0 saved links".
@@ -140,15 +145,27 @@ pipeline.
 - **Done when:** you can save three real articles and see them with their titles filled in.
 
 ### Slice 2: Capture from anywhere
-*"Save from my phone and browser without opening the app."*
-- `api_tokens` table, a settings page to create or revoke tokens, and
-  `POST /api/links` with a Bearer token (Access bypass rule for `/api/*`;
-  the token *is* the auth there).
-- A bookmarklet that opens a small prefilled save popup (so you can add a
-  note and tags).
-- An iOS Shortcut / Android share target: make the app a PWA with a
-  `share_target` in the manifest.
-- **Done when:** sharing from your phone's share sheet adds the link to the queue.
+*"Save from my iPhone and browser without opening the app."*
+- `api_tokens` table, and a settings page to create or revoke tokens (shown
+  once, stored hashed).
+- `POST /api/links` taking `{ url, note?, tags?, reference? }` with
+  `Authorization: Bearer <token>`. It returns the saved link, including whether
+  it already existed.
+- Access setup: a second Access application scoped to
+  `read.yourdomain.com/api/*` with a **Bypass** policy. The app's own tokens
+  handle auth there. (Access service tokens would also work, but our own tokens
+  can be revoked one at a time and carry scopes, which agents will need.)
+- **iOS Shortcut "Save to Reading List"**, available in the share sheet:
+  receive URLs from Share Sheet → *Ask for Input* (note, optional) → *Ask for
+  Input* (tags, optional) → *Get Contents of URL* (POST JSON with the token
+  header) → *Show Notification* with the saved title. A second, no-prompt
+  variant does a one-tap save. We'll keep the Shortcut steps written up in
+  `docs/ios-shortcut.md` so it can be rebuilt.
+- A bookmarklet for desktop that opens a small prefilled save popup.
+- (Safari doesn't support the Web Share Target API, so a PWA share target is
+  out; the Shortcut covers it.)
+- **Done when:** sharing from Safari on your iPhone adds the link, with a note
+  and tags, to the queue.
 
 ### Slice 3: Queue workflow
 *"Actually work through the reading list."*
@@ -170,7 +187,14 @@ pipeline.
 ### Slice 5: Automatic polling
 *"New posts show up without me doing anything."*
 - `workers/fetcher` with a `*/15 * * * *` cron: select feeds where
-  `next_fetch_at <= now`, limited to the subrequest budget.
+  `next_fetch_at <= now` (capped at 40 per tick for the subrequest limit).
+- **Fan out one feed per invocation.** The cron handler only picks due feeds
+  and calls itself through a service binding (`POST /poll/:feedId`) for each.
+  Every call gets its own 10 ms CPU budget, so one huge feed can't sink the
+  whole run. It's about 15 lines of code, so we do it from the start rather
+  than waiting for a CPU-limit error.
+- Budget at 100 feeds: default interval 1 h → ~2,400 fetches/day, and most come
+  back 304 with no writes. That's well under every free-tier limit.
 - Conditional GET (`If-None-Match` / `If-Modified-Since`); a 304 writes nothing.
 - Backoff: more errors → a longer `next_fetch_at`; show broken feeds in the UI.
 - Adaptive interval: feeds that rarely post get checked less often.
@@ -204,6 +228,21 @@ pipeline.
 - Folders/groups for subscriptions.
 - Export all links as JSON/CSV (your data is yours).
 
+### Slice 9: Agent access
+*"Let an agent save, tag, triage, and search for me."*
+- Round out the JSON API that Slice 2 started: `GET /api/search`,
+  `GET /api/entries?unread=1`, `PATCH /api/links/:id` (tags, note, status,
+  reference), `POST /api/entries/:id/save`. Everything uses the same Bearer
+  tokens, with scopes so an agent can get a read-only or a save-only token.
+- A remote **MCP server** at `/mcp` on the same Worker. Its tools are thin
+  wrappers over those endpoints (`save_link`, `search_links`,
+  `list_unread_entries`, `tag_link`, `triage_entry`). Claude and other agents
+  can then use it directly, and iOS Shortcuts can keep using the plain API.
+- An `actor` column on writes (`user` / `shortcut` / `agent:<token name>`) so you
+  can see and undo what an agent did.
+- **Done when:** an agent can "go through my unread feeds and queue anything
+  about X, tagged X" and you can see exactly what it changed.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshots:** keep a readable copy of reference articles in R2 so
   link-rot doesn't eat your library. (Readability may need to run off the
@@ -231,13 +270,15 @@ migrations/          numbered SQL migrations (shared by both workers)
 canonicalization are where the subtle bugs live, so they get fixture tests
 using real-world feeds.
 
-## Open questions
+## Decisions so far
 
-1. **Roughly how many feeds?** Tens vs. hundreds decides whether Slice 5 needs
-   the fan-out design or a single cron batch is enough.
-2. **Phone: iOS or Android?** This affects Slice 2: an iOS Shortcut vs. a PWA
-   share target (Android handles that far better).
-3. **Custom domain on Cloudflare?** Access is easiest with one; `*.workers.dev`
-   works but is clunkier.
-4. **Public sharing** of references: is it wanted eventually? If so, keep
-   `links` IDs non-sequential (ULIDs) from the start.
+- **Feeds:** dozens to start, 100 at most. A single 15-minute cron with a
+  per-feed fan-out is plenty; no queues needed.
+- **Mobile:** iOS only, no native app. Capture through an iOS Shortcut in the
+  share sheet, calling a token-authenticated JSON API.
+- **Agents:** they'll use the same API with scoped tokens, plus an MCP endpoint
+  in Slice 9.
+- **Hosting:** a subdomain of your custom domain, protected by Cloudflare
+  Access, with a Bypass rule on `/api/*` for token auth.
+- **IDs:** ULIDs everywhere, so public share pages stay possible without
+  committing to them.
