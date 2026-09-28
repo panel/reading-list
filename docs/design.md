@@ -111,6 +111,18 @@ in the UI, including buttons, swipe hints and shortcuts.
   horizontal swipes happen by accident while scrolling or selecting text. You
   move to the next article by reaching the end and choosing.
 
+**Feeds inbox:** unread first, a filter chip per feed.
+
+- Swipe a row right → **Later** (saved to the back of the queue), left →
+  **Dismiss** (hidden from the inbox, with Undo). On desktop, Later / ☆ /
+  Dismiss buttons appear on hover.
+- ☆ **Star** keeps a post as a reference *without* queueing it (it's usually
+  just been read), so it lands in the archive with the ★.
+- "Mark all read" at the end of the list (all feeds, or the filtered one).
+- The reader's bar for a feed post is Later / ☆ / Copy link / Next →. Saving
+  opens an inline note-and-tags editor. Keys: `L` later, `S` star, `J`/`E` next,
+  `O` original.
+
 **Saved links (not feed posts): link out.**
 
 - A preview box built from og:image, site and favicon, og:title,

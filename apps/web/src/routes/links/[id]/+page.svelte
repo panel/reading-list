@@ -7,7 +7,7 @@
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
 	import { ignoreShortcut } from '$lib/keys';
-	import { toast } from '$lib/toast.svelte';
+	import { toast, undoQueueChange } from '$lib/toast.svelte';
 
 	let { data } = $props();
 	const link = $derived(data.link);
@@ -36,7 +36,7 @@
 			if (result.type !== 'success' || !result.data?.undo) return update();
 			toast.show({
 				message: `${result.data.done === 'finished' ? 'Finished' : 'Later'} · ${title}`,
-				undo: { id: link.id, state: result.data.undo }
+				undo: undoQueueChange(resolve('/links/[id]', { id: link.id }), result.data.undo)
 			});
 			const nextId = result.data.nextId as string | null;
 			await goto(nextId ? resolve('/links/[id]', { id: nextId }) : resolve('/'), {

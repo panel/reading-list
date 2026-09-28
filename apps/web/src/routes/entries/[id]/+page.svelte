@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { deserialize, enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import { ignoreShortcut } from '$lib/keys';
 	import { resolve } from '$app/paths';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { hostname, relativeDay } from '$lib/format';
@@ -10,6 +12,63 @@
 	const entry = $derived(data.entry);
 	const original = $derived(entry.url ?? entry.siteUrl);
 	const host = $derived(original ? hostname(original) : null);
+
+	const saved = $derived(data.link?.status === 'queued');
+	const starred = $derived(Boolean(data.link?.isReference));
+	const nextHref = $derived(
+		data.next ? resolve('/entries/[id]', { id: data.next.id }) : resolve('/feeds')
+	);
+	let editingNote = $state(false);
+	let laterForm = $state<HTMLFormElement>();
+	let starForm = $state<HTMLFormElement>();
+
+	// Lift toasts above this page's fixed action bar.
+	$effect(() => {
+		toast.raised = true;
+		return () => (toast.raised = false);
+	});
+
+	const later: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			if (result.type === 'success') {
+				toast.show({ message: 'Saved to your queue' });
+				editingNote = true;
+			} else if (result.type === 'failure') {
+				toast.show({ message: String(result.data?.message ?? 'Couldn’t save this post') });
+			}
+		};
+
+	const star: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			if (result.type === 'success') {
+				toast.show({
+					message: result.data?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
+				});
+			} else if (result.type === 'failure') {
+				toast.show({ message: String(result.data?.message ?? 'Couldn’t star this post') });
+			}
+		};
+
+	async function copyLink() {
+		if (!original) return;
+		await navigator.clipboard.writeText(original);
+		toast.show({ message: 'Link copied' });
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		if (ignoreShortcut(event)) return;
+		const key = event.key.toLowerCase();
+		if (key === 'l' && !saved) laterForm?.requestSubmit();
+		else if (key === 's') starForm?.requestSubmit();
+		else if (key === 'j' || key === 'e') goto(nextHref);
+		else if (key === 'o' && original) window.open(original, '_blank', 'noopener,noreferrer');
+		else return;
+		event.preventDefault();
+	}
 
 	// Opening a post marks it read.
 	$effect(() => {
@@ -30,7 +89,9 @@
 	<title>{entry.title ?? 'Post'} · Reading List</title>
 </svelte:head>
 
-<article class="pb-16">
+<svelte:window {onkeydown} />
+
+<article class="pb-28">
 	{#if entry.imageUrl}
 		<LinkImage
 			link={{
@@ -108,6 +169,55 @@
 			>
 		{/if}
 
+		{#if editingNote && data.link}
+			<form
+				method="POST"
+				action="{resolve('/links/[id]', { id: data.link.id })}?/edit"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update({ reset: false });
+						if (result.type === 'success') {
+							editingNote = false;
+							toast.show({ message: 'Note saved' });
+						}
+					}}
+				class="mt-6 flex flex-col gap-2.5 rounded-md border border-accent bg-surface p-4"
+			>
+				<p class="kicker text-accent">In your queue · add a note?</p>
+				<label for="save-note" class="sr-only">Note</label>
+				<textarea
+					id="save-note"
+					name="note"
+					rows="3"
+					placeholder="Why you saved it, who to send it to…"
+					class="w-full resize-y rounded-md border border-rule-strong bg-surface px-3.5 py-3 text-[1.0625rem] leading-[1.55] placeholder:text-ink-3 focus:border-accent focus:outline-none"
+					>{data.link.note ?? ''}</textarea
+				>
+				<label for="save-tags" class="sr-only">Tags</label>
+				<input
+					id="save-tags"
+					name="tags"
+					type="text"
+					autocomplete="off"
+					autocapitalize="none"
+					placeholder="Tags, e.g. architecture, reference"
+					class="h-12 w-full rounded-md border border-rule-strong bg-surface px-3.5 font-ui text-base placeholder:text-ink-3 focus:border-accent focus:outline-none"
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						onclick={() => (editingNote = false)}
+						class="h-11 rounded-md px-4 font-ui text-sm font-bold text-ink-2 hover:text-ink"
+						>Skip</button
+					>
+					<button
+						class="h-11 rounded-md bg-ink px-5 font-ui text-sm font-bold text-paper hover:bg-accent-strong"
+						>Save note</button
+					>
+				</div>
+			</form>
+		{/if}
+
 		<form
 			method="POST"
 			action="?/read"
@@ -153,3 +263,82 @@
 		{/if}
 	</div>
 </article>
+
+<!-- Action bar: above the mobile tab bar, at the bottom of the window on desktop. -->
+<div
+	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
+>
+	<div class="mx-auto flex max-w-[44rem] gap-2 px-3.5 py-2.5">
+		{#if saved && data.link}
+			<a
+				href={resolve('/links/[id]', { id: data.link.id })}
+				class="flex h-12.5 flex-1 items-center justify-center rounded-md border border-accent bg-paper font-ui text-[0.9375rem] font-bold text-accent"
+				>In queue ✓</a
+			>
+		{:else}
+			<form
+				bind:this={laterForm}
+				method="POST"
+				action="?/later"
+				use:enhance={later}
+				class="flex flex-1"
+			>
+				<button
+					disabled={!original}
+					class="flex h-12.5 flex-1 items-center justify-center rounded-md border border-rule-strong bg-paper font-ui text-[0.9375rem] font-bold text-accent hover:border-accent disabled:opacity-50"
+					>Later</button
+				>
+			</form>
+		{/if}
+		<form bind:this={starForm} method="POST" action="?/star" use:enhance={star}>
+			<input type="hidden" name="starred" value={String(!starred)} />
+			<button
+				disabled={!original}
+				aria-label={starred ? 'Unstar' : 'Star as reference'}
+				aria-pressed={starred}
+				class="flex h-12.5 w-12.5 items-center justify-center rounded-md border border-rule-strong bg-paper hover:border-ink disabled:opacity-50 {starred
+					? 'text-accent'
+					: 'text-ink'}"
+			>
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill={starred ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" /></svg
+				>
+			</button>
+		</form>
+		<button
+			type="button"
+			onclick={copyLink}
+			disabled={!original}
+			aria-label="Copy link"
+			class="flex h-12.5 w-12.5 items-center justify-center rounded-md border border-rule-strong bg-paper text-ink hover:border-ink disabled:opacity-50"
+		>
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+				><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path
+					d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"
+				/></svg
+			>
+		</button>
+		<a
+			href={nextHref}
+			class="flex h-12.5 flex-[1.3] items-center justify-center rounded-md bg-ink font-ui text-[0.9375rem] font-bold text-paper hover:bg-accent-strong"
+			>{data.next ? 'Next →' : 'Back to feeds'}</a
+		>
+	</div>
+</div>

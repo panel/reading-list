@@ -1,0 +1,1 @@
+CREATE INDEX `links_user_source_entry` ON `links` (`user_id`,`source_entry_id`);

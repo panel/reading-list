@@ -1,9 +1,25 @@
 import type { QueueState } from '$lib/queue';
 
+/** Undo is a form POST: an action URL plus the fields that reverse the change. */
+export interface Undo {
+	action: string;
+	fields: Record<string, string>;
+}
+
+/** Undo for Finished / Later: restore the link's exact previous queue state. */
+export const undoQueueChange = (linkUrl: string, state: QueueState): Undo => ({
+	action: `${linkUrl}?/restore`,
+	fields: {
+		status: state.status,
+		queuedAt: String(state.queuedAt),
+		readAt: state.readAt === null ? '' : String(state.readAt)
+	}
+});
+
 export interface Toast {
 	message: string;
-	/** When set, the toast offers Undo, which restores this link to this state. */
-	undo?: { id: string; state: QueueState };
+	/** When set, the toast offers Undo. */
+	undo?: Undo;
 }
 
 const DURATION_MS = 6000;

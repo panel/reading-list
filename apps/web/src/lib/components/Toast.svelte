@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { resolve } from '$app/paths';
 	import { toast } from '$lib/toast.svelte';
 </script>
 
@@ -21,7 +20,7 @@
 				{@const undo = current.undo}
 				<form
 					method="POST"
-					action="{resolve('/links/[id]', { id: undo.id })}?/restore"
+					action={undo.action}
 					use:enhance={() => {
 						toast.clear();
 						return async ({ update }) => {
@@ -30,9 +29,9 @@
 						};
 					}}
 				>
-					<input type="hidden" name="status" value={undo.state.status} />
-					<input type="hidden" name="queuedAt" value={undo.state.queuedAt} />
-					<input type="hidden" name="readAt" value={undo.state.readAt ?? ''} />
+					{#each Object.entries(undo.fields) as [name, value] (name)}
+						<input type="hidden" {name} {value} />
+					{/each}
 					<button
 						class="h-10 rounded px-3.5 font-bold text-[#9fd3d6] hover:bg-paper/10 hover:text-paper"
 						>Undo</button

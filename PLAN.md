@@ -271,6 +271,12 @@ pipeline.
 - Mark all read (per feed / all).
 - **Done when:** you can triage the feed inbox to empty, with keepers in the
   queue or library.
+- **Status:** built. A saved post becomes a link with `source = 'feed'` and
+  `source_entry_id` (migration 0005 indexes it). It dedupes against links saved by
+  hand with the same canonical URL. Later = queue; Star = reference, archived and
+  not queued; Dismiss hides the post, with Undo. Undo notices are now generic (a form
+  action plus fields). Known gap: the inbox list marks a post "In queue" only when
+  it was saved from the feed; the reader also recognizes links saved by hand.
 
 ### Slice 7: Reference library and search
 *"Find the article I always cite, fast."*

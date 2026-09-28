@@ -70,6 +70,8 @@ export const links = sqliteTable(
 		uniqueIndex('links_user_canonical_url').on(t.userId, t.canonicalUrl),
 		index('links_user_status_queued').on(t.userId, t.status, t.queuedAt),
 		index('links_user_reference').on(t.userId, t.isReference, t.savedAt),
+		// Which feed posts a user has already saved or starred.
+		index('links_user_source_entry').on(t.userId, t.sourceEntryId),
 		check('links_status', sql`${t.status} IN ('queued', 'archived')`),
 		check('links_source', sql`${t.source} IN ('manual', 'feed')`)
 	]
