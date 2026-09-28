@@ -158,7 +158,7 @@ pipeline.
   description, site name, and `og:image`. Upsert the link and its tags.
 - Queue view: newest first; each card shows title, site, note, and tags.
 - **Done when:** you can save three real articles and see them with their titles filled in.
-- **Status:** built and verified against local test pages (the dev sandbox can't reach the
+- **Status: ✅ done.** Live and checked on the real site. Built and verified against local test pages (the dev sandbox can't reach the
   internet). Metadata comes from a small `<head>` scanner in `packages/core` instead of
   `HTMLRewriter`: HTMLRewriter isn't available in the Node dev server or unit tests. It reads
   only up to `</head>`, so CPU stays low. Queue order is oldest-first by `queued_at`.
