@@ -155,16 +155,25 @@ pipeline.
   `read.yourdomain.com/api/*` with a **Bypass** policy. The app's own tokens
   handle auth there. (Access service tokens would also work, but our own tokens
   can be revoked one at a time and carry scopes, which agents will need.)
-- **iOS Shortcut "Save to Reading List"**, available in the share sheet:
-  receive URLs from Share Sheet → *Ask for Input* (note, optional) → *Ask for
+- **iOS Shortcut "Save to Reading List"**, available in the share sheet. Chrome
+  on iOS (the main browser) opens the standard iOS share sheet from
+  *Share…*, so the Shortcut works the same there as in Safari. Chrome sometimes
+  shares the page title as text along with the URL, so the Shortcut accepts
+  URLs *and* text and runs *Get URLs from Input* first; the server fills in
+  the title either way. Flow: receive from Share Sheet → *Ask for Input* (note, optional) → *Ask for
   Input* (tags, optional) → *Get Contents of URL* (POST JSON with the token
   header) → *Show Notification* with the saved title. A second, no-prompt
   variant does a one-tap save. We'll keep the Shortcut steps written up in
   `docs/ios-shortcut.md` so it can be rebuilt.
-- A bookmarklet for desktop that opens a small prefilled save popup.
-- (Safari doesn't support the Web Share Target API, so a PWA share target is
-  out; the Shortcut covers it.)
-- **Done when:** sharing from Safari on your iPhone adds the link, with a note
+- Desktop Chrome: a bookmarklet that `window.open`s a small prefilled save
+  page on our domain. It opens a popup instead of injecting a script, so
+  sites with strict CSP can't block it. A small unpacked Chrome extension
+  (toolbar button + keyboard shortcut) is a possible upgrade later if the
+  bookmarklet feels clunky.
+- (Every iOS browser, Chrome included, runs on WebKit, which doesn't support
+  the Web Share Target API, so a PWA share target is out; the Shortcut covers
+  it.)
+- **Done when:** sharing from Chrome on your iPhone adds the link, with a note
   and tags, to the queue.
 
 ### Slice 3: Queue workflow
@@ -274,7 +283,7 @@ using real-world feeds.
 
 - **Feeds:** dozens to start, 100 at most. A single 15-minute cron with a
   per-feed fan-out is plenty; no queues needed.
-- **Mobile:** iOS only, no native app. Capture through an iOS Shortcut in the
+- **Mobile:** iOS only, Chrome as the main browser, no native app. Capture through an iOS Shortcut in the
   share sheet, calling a token-authenticated JSON API.
 - **Agents:** they'll use the same API with scoped tokens, plus an MCP endpoint
   in Slice 9.
