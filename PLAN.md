@@ -305,6 +305,17 @@ pipeline.
 - Retention: a nightly prune of unsaved `feed_entries` older than 30 days.
 - Folders/groups for subscriptions.
 - Export all links as JSON/CSV (your data is yours).
+- **Status:** built.
+  - OPML import (Manage feeds): creates shared feed rows as due now and subscriptions with
+    their folders; the fetcher fills them in, since fetching 100 feeds in one request would
+    exceed the request limits. Re-importing is a no-op.
+  - Folders (migration 0007 `subscriptions.folder`) group the Manage list and add folder
+    chips to the inbox; Mark all read respects the folder.
+  - Exports at `/export/links.json`, `/export/links.csv` (quoted, formula-safe) and
+    `/export/feeds.opml`, all linked from Settings → Your data.
+  - A nightly prune (fetcher cron `47 3 * * *`) removes unsaved posts that are older than
+    30 days *and* beyond their feed's newest 50, so they can't come back as unread, plus
+    feeds nobody follows. Checked against the local D1 with synthetic data.
 
 ### Slice 9: Agent access
 *"Let an agent save, tag, triage, and search for me."*

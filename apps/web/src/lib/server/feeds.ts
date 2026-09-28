@@ -1,5 +1,11 @@
-import { and, asc, count, eq, isNull, sql } from 'drizzle-orm';
-import { findFeed, refreshFeed, upsertFeed, type RefreshResult } from '@reading-list/core';
+import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
+import {
+	findFeed,
+	refreshFeed,
+	upsertFeed,
+	type OpmlFeed,
+	type RefreshResult
+} from '@reading-list/core';
 import {
 	entryState,
 	feedEntries,
@@ -46,6 +52,7 @@ export async function listSubscriptions(db: Db, userId: string) {
 		.select({
 			feed: feeds,
 			titleOverride: subscriptions.titleOverride,
+			folder: subscriptions.folder,
 			unread: sql<number>`coalesce(${unread.unread}, 0)`
 		})
 		.from(subscriptions)
@@ -102,3 +109,68 @@ async function refreshMany(db: Db, list: Feed[], fetchFn?: typeof fetch, concurr
 
 export const feedTitle = (feed: Pick<Feed, 'title' | 'url'>, override?: string | null) =>
 	override ?? feed.title ?? new URL(feed.url).hostname.replace(/^www\./, '');
+
+const chunks = <T>(list: T[], size: number) =>
+	Array.from({ length: Math.ceil(list.length / size) }, (_, i) =>
+		list.slice(i * size, (i + 1) * size)
+	);
+
+/**
+ * Subscribes to every feed in an OPML list. Feeds aren't fetched here (a big
+ * list would exceed a request's subrequest and CPU limits); they're created as
+ * due now, and the fetcher fills them in over its next few runs.
+ */
+export async function importFeeds(db: Db, userId: string, list: OpmlFeed[]) {
+	const now = new Date();
+	// D1 allows 100 bound parameters per statement.
+	for (const batch of chunks(list, 15)) {
+		await db
+			.insert(feeds)
+			.values(
+				batch.map((f) => ({ url: f.url, title: f.title, siteUrl: f.siteUrl, nextFetchAt: now }))
+			)
+			.onConflictDoNothing();
+	}
+	let added = 0;
+	for (const batch of chunks(list, 30)) {
+		const rows = await db
+			.select({ id: feeds.id, url: feeds.url })
+			.from(feeds)
+			.where(
+				inArray(
+					feeds.url,
+					batch.map((f) => f.url)
+				)
+			);
+		const folderFor = new Map(batch.map((f) => [f.url, f.folder]));
+		if (rows.length === 0) continue;
+		const inserted = await db
+			.insert(subscriptions)
+			.values(rows.map((r) => ({ userId, feedId: r.id, folder: folderFor.get(r.url) ?? null })))
+			.onConflictDoNothing()
+			.returning({ feedId: subscriptions.feedId });
+		added += inserted.length;
+	}
+	return { added, alreadyFollowing: list.length - added };
+}
+
+/** The user's subscriptions as OPML entries. */
+export async function exportFeeds(db: Db, userId: string): Promise<OpmlFeed[]> {
+	const rows = await listSubscriptions(db, userId);
+	return rows.map(({ feed, titleOverride, folder }) => ({
+		url: feed.url,
+		title: feedTitle(feed, titleOverride),
+		siteUrl: feed.siteUrl,
+		folder: folder ?? null
+	}));
+}
+
+export async function setFolder(db: Db, userId: string, feedId: string, folder: string | null) {
+	const cleaned = folder?.trim().slice(0, 60) || null;
+	const updated = await db
+		.update(subscriptions)
+		.set({ folder: cleaned })
+		.where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, feedId)))
+		.returning({ feedId: subscriptions.feedId });
+	return updated.length > 0;
+}

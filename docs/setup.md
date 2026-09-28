@@ -99,7 +99,8 @@ app refuses every request with a 500.
    isn't active yet.
 
 5. **Deploy the feed fetcher** (Slice 5). A second Worker, `reading-list-fetcher`,
-   runs every 15 minutes and checks feeds for new posts. It has no URL of its
+   runs every 15 minutes and checks feeds for new posts, and once a night
+   (03:47 UTC) removes old posts you never saved. It has no URL of its
    own and shares the same D1 database.
 
    ```sh

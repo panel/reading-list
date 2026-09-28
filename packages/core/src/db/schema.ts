@@ -137,6 +137,8 @@ export const subscriptions = sqliteTable(
 			.notNull()
 			.references(() => feeds.id, { onDelete: 'cascade' }),
 		titleOverride: text('title_override'),
+		// Optional group for the feed in the inbox, e.g. "Tech". Imported from OPML folders.
+		folder: text('folder'),
 		createdAt: timestampNow('created_at')
 	},
 	(t) => [primaryKey({ columns: [t.userId, t.feedId] }), index('subscriptions_feed').on(t.feedId)]

@@ -50,6 +50,13 @@
       "when": 1790609566628,
       "tag": "0006_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790624897979,
+      "tag": "0007_subscription_folders",
+      "breakpoints": true
     }
   ]
 }

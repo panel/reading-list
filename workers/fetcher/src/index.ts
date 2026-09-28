@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { refreshFeed } from '@reading-list/core';
+import { pruneEntries, refreshFeed } from '@reading-list/core';
 import { feeds, getDb } from '@reading-list/core/db';
-import { dueFeeds, matchPoll, pollUrl } from './poll';
+import { dueFeeds, matchPoll, pollUrl, PRUNE_CRON } from './poll';
 
 /**
  * Feed poller. Every 15 minutes the cron picks the feeds that are due and
@@ -12,6 +12,10 @@ import { dueFeeds, matchPoll, pollUrl } from './poll';
 export default {
 	async scheduled(controller, env) {
 		const db = getDb(env.DB);
+		if (controller.cron === PRUNE_CRON) {
+			console.log(JSON.stringify({ pruned: await pruneEntries(db) }));
+			return;
+		}
 		const due = await dueFeeds(db, new Date(controller.scheduledTime));
 		if (due.length === 0) return;
 

@@ -53,10 +53,13 @@ export type InboxEntry = Awaited<ReturnType<typeof getInbox>>['entries'][number]
 export async function getInbox(
 	db: Db,
 	userId: string,
-	{ feedId, limit = 60 }: { feedId?: string; limit?: number } = {}
+	{ feedId, folder, limit = 60 }: { feedId?: string; folder?: string; limit?: number } = {}
 ) {
-	const notDismissed = isNull(entryState.dismissedAt);
-	const where = feedId ? and(notDismissed, eq(feedEntries.feedId, feedId)) : notDismissed;
+	const where = and(
+		isNull(entryState.dismissedAt),
+		feedId ? eq(feedEntries.feedId, feedId) : undefined,
+		folder ? eq(subscriptions.folder, folder) : undefined
+	);
 	const entries = await subscribedEntries(db, userId)
 		.where(where)
 		.orderBy(sql`${entryState.readAt} is not null`, desc(entryDate), desc(feedEntries.id))
@@ -237,7 +240,11 @@ export async function setDismissed(db: Db, userId: string, entryId: string, dism
 }
 
 /** Marks every post in the user's feeds (or one feed) read. Returns how many changed. */
-export async function markAllRead(db: Db, userId: string, feedId?: string): Promise<number> {
+export async function markAllRead(
+	db: Db,
+	userId: string,
+	{ feedId, folder }: { feedId?: string; folder?: string } = {}
+): Promise<number> {
 	const now = Date.now();
 	// (An INSERT … SELECT upsert needs a WHERE clause, or SQLite reads ON CONFLICT as part of a join.)
 	const result = await db.run(sql`
@@ -247,6 +254,7 @@ export async function markAllRead(db: Db, userId: string, feedId?: string): Prom
 		join subscriptions s on s.feed_id = fe.feed_id and s.user_id = ${userId}
 		left join entry_state es on es.entry_id = fe.id and es.user_id = ${userId}
 		where es.read_at is null ${feedId ? sql`and fe.feed_id = ${feedId}` : sql``}
+		${folder ? sql`and s.folder = ${folder}` : sql``}
 		on conflict (user_id, entry_id) do update set read_at = excluded.read_at
 	`);
 	return result.meta.changes ?? 0;

@@ -28,6 +28,9 @@ export function dueFeeds(db: Db, now: Date, limit = MAX_FEEDS_PER_TICK) {
 		.limit(limit);
 }
 
+/** The daily cleanup schedule; must match a cron in wrangler.jsonc (tested). */
+export const PRUNE_CRON = '47 3 * * *';
+
 const POLL_PATH = /^\/poll\/([0-9A-HJKMNP-TV-Z]{26})$/;
 
 export const pollUrl = (feedId: string) => `https://fetcher.internal/poll/${feedId}`;

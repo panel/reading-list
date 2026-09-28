@@ -58,11 +58,21 @@
 		};
 
 	const current = $derived(data.feeds.find((f) => f.id === data.feedId));
+	const folders = $derived(
+		[...new Set(data.feeds.map((f) => f.folder).filter((f): f is string => Boolean(f)))]
+			.sort((a, b) => a.localeCompare(b))
+			.map((name) => ({
+				name,
+				unread: data.feeds.filter((f) => f.folder === name).reduce((n, f) => n + f.unread, 0)
+			}))
+	);
+	// The filter the page is showing: one feed, one folder, or everything.
+	const scopeTitle = $derived(current?.title ?? data.folder ?? null);
 	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const summary = $derived(
 		[
 			`${data.inbox.unread} unread`,
-			!current &&
+			!scopeTitle &&
 				data.feeds.length &&
 				`${data.feeds.length} ${data.feeds.length === 1 ? 'feed' : 'feeds'}`
 		]
@@ -78,7 +88,7 @@
 <div class="mx-auto max-w-3xl px-5 pt-5 lg:pt-10">
 	<header class="flex flex-wrap items-end justify-between gap-3 border-b-2 border-ink pb-4">
 		<div>
-			<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">{current?.title ?? 'Feeds'}</h1>
+			<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">{scopeTitle ?? 'Feeds'}</h1>
 			<p class="mt-1.5 font-ui text-[0.9375rem] text-ink-2">
 				{summary}
 			</p>
@@ -139,13 +149,27 @@
 				<li>
 					<a
 						href={resolve('/feeds')}
-						aria-current={!data.feedId ? 'page' : undefined}
-						class="flex h-9 items-center rounded-full border px-3.5 font-ui text-[0.8125rem] font-bold whitespace-nowrap {!data.feedId
+						aria-current={!data.feedId && !data.folder ? 'page' : undefined}
+						class="flex h-9 items-center rounded-full border px-3.5 font-ui text-[0.8125rem] font-bold whitespace-nowrap {!data.feedId &&
+						!data.folder
 							? 'border-ink bg-ink text-paper'
 							: 'border-rule-strong text-ink-2 hover:border-ink'}">All</a
 					>
 				</li>
-				{#each data.feeds as feed (feed.id)}
+				{#each folders as f (f.name)}
+					<li>
+						<a
+							href="{resolve('/feeds')}?folder={encodeURIComponent(f.name)}"
+							aria-current={data.folder === f.name ? 'page' : undefined}
+							class="flex h-9 items-center gap-1.5 rounded-full border px-3.5 font-ui text-[0.8125rem] font-bold whitespace-nowrap {data.folder ===
+							f.name
+								? 'border-accent bg-accent text-paper'
+								: 'border-accent/40 text-accent hover:border-accent'}"
+							>{f.name}{#if f.unread}<span class="font-normal opacity-75">{f.unread}</span>{/if}</a
+						>
+					</li>
+				{/each}
+				{#each data.feeds.filter((f) => !data.folder || f.folder === data.folder) as feed (feed.id)}
 					<li>
 						<a
 							href="{resolve('/feeds')}?feed={encodeURIComponent(feed.id)}"
@@ -285,7 +309,7 @@
 				method="POST"
 				action="?/markAllRead"
 				use:enhance={({ cancel }) => {
-					const scope = current ? current.title : 'all your feeds';
+					const scope = scopeTitle ?? 'all your feeds';
 					if (!confirm(`Mark every post in ${scope} as read?`)) return cancel();
 					return async ({ result, update }) => {
 						await update();
@@ -298,9 +322,10 @@
 				class="flex justify-center py-6"
 			>
 				<input type="hidden" name="feedId" value={data.feedId ?? ''} />
+				<input type="hidden" name="folder" value={data.folder ?? ''} />
 				<button
 					class="h-11 rounded-md border border-rule-strong px-4 font-ui text-sm font-bold text-ink-2 hover:border-ink hover:text-ink"
-					>Mark all {current ? `in ${current.title}` : ''} read</button
+					>Mark all {scopeTitle ? `in ${scopeTitle}` : ''} read</button
 				>
 			</form>
 		{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
 	import { relativeDay } from '$lib/format';
 	import { SCOPES, type Scope } from '$lib/tokens';
@@ -28,6 +29,42 @@
 		<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">Settings</h1>
 		<p class="mt-2 font-ui text-[0.9375rem] text-ink-2">Signed in as {data.email}</p>
 	</header>
+
+	<section class="flex flex-col gap-3" aria-labelledby="data-heading">
+		<div class="border-b-2 border-ink pb-3">
+			<h2 id="data-heading" class="kicker text-ink-2">Your data</h2>
+		</div>
+		<p class="text-[1.0625rem] leading-[1.55]">
+			Download everything you’ve saved, with notes and tags, or your subscriptions to use in another
+			reader.
+		</p>
+		<ul class="flex flex-wrap gap-2 font-ui text-sm font-bold">
+			<li>
+				<a
+					href={resolve('/export/links.[format]', { format: 'json' })}
+					download
+					class="flex h-11 items-center rounded-md border border-rule-strong px-4 text-ink hover:border-ink"
+					>Links · JSON</a
+				>
+			</li>
+			<li>
+				<a
+					href={resolve('/export/links.[format]', { format: 'csv' })}
+					download
+					class="flex h-11 items-center rounded-md border border-rule-strong px-4 text-ink hover:border-ink"
+					>Links · CSV</a
+				>
+			</li>
+			<li>
+				<a
+					href={resolve('/export/feeds.opml')}
+					download
+					class="flex h-11 items-center rounded-md border border-rule-strong px-4 text-ink hover:border-ink"
+					>Subscriptions · OPML</a
+				>
+			</li>
+		</ul>
+	</section>
 
 	<section class="flex flex-col gap-4" aria-labelledby="tokens-heading">
 		<div class="border-b-2 border-ink pb-3">
