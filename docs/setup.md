@@ -82,5 +82,16 @@ app refuses every request with a 500.
    - Secrets → Actions: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
    - Variables → Actions: `DEPLOY_ENABLED` = `true`
 
+   `DEPLOY_ENABLED` must be a **variable**, not a secret: the workflow can't
+   read secrets when deciding whether to run the deploy job.
+
    Commit the `wrangler.jsonc` changes from steps 1 and 3. Every push to
    `main` then runs checks, applies migrations, and deploys.
+
+## Troubleshooting
+
+- **Errors in production:** Workers & Pages → reading-list → Logs, or stream
+  them live with `pnpm --filter web exec wrangler tail`.
+- **`no such table`:** migrations haven't been applied to the remote
+  database. Run `pnpm --filter web db:migrate:remote` (CI does this before
+  each deploy).

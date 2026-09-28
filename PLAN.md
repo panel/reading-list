@@ -135,9 +135,8 @@ pipeline.
   and upserts the user into `locals.user`.
 - GitHub Action: typecheck, test, migrate, deploy on push to `main`.
 - **Done when:** visiting the URL asks you to log in and then shows "0 saved links".
-- **Status:** built and verified locally. Deploying needs the one-time
-  Cloudflare setup in `docs/setup.md` (D1 database id, subdomain, Access app,
-  GitHub secrets). The `fetcher` Worker waits for Slice 5, when it's first needed.
+- **Status: ✅ done.** Live at `reader.nelsonfamily.fyi` behind Access. The
+  `fetcher` Worker waits for Slice 5, when it's first needed.
 
 > **⏸ Design checkpoint (before Slice 1's UI).** Slice 0 ships an unstyled
 > page on purpose. Before building the first real screens (queue cards, save
