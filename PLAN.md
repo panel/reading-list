@@ -130,7 +130,7 @@ pipeline.
 - pnpm monorepo: `apps/web` (SvelteKit, bootstrapped with `sv`), `packages/core`
   (schema, types, shared logic such as URL canonicalization and feed parsing).
 - `wrangler.toml` with a D1 binding and a first migration (`users`, `links`).
-- App on a subdomain of your custom domain (e.g. `read.yourdomain.com`), with a
+- App on a subdomain of your custom domain (e.g. `reader.nelsonfamily.fyi`), with a
   Cloudflare Access application protecting it; `hooks.server.ts` verifies the Access JWT
   and upserts the user into `locals.user`.
 - GitHub Action: typecheck, test, migrate, deploy on push to `main`.
@@ -163,7 +163,7 @@ pipeline.
   `Authorization: Bearer <token>`. It returns the saved link, including whether
   it already existed.
 - Access setup: a second Access application scoped to
-  `read.yourdomain.com/api/*` with a **Bypass** policy. The app's own tokens
+  `reader.nelsonfamily.fyi/api/*` with a **Bypass** policy. The app's own tokens
   handle auth there. (Access service tokens would also work, but our own tokens
   can be revoked one at a time and carry scopes, which agents will need.)
 - **iOS Shortcut "Save to Reading List"**, available in the share sheet. Chrome

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { identify } from './auth';
 
-const request = new Request('https://read.example.com/');
+const request = new Request('https://reader.nelsonfamily.fyi/');
 const noAccess = { ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '' };
 
 describe('identify', () => {
