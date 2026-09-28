@@ -36,6 +36,12 @@ describe('mergeNote', () => {
 		expect(mergeNote('  ', 'new')).toBe('new');
 	});
 
+	it('treats a repeat with different whitespace or case as a repeat', () => {
+		expect(mergeNote('First line.\n\nSecond line.', 'first line. second   line.')).toBe(
+			'First line.\n\nSecond line.'
+		);
+	});
+
 	it('appends a different note and skips a repeat', () => {
 		expect(mergeNote('first', 'second')).toBe('first\n\nsecond');
 		expect(mergeNote('first\n\nsecond', 'second')).toBe('first\n\nsecond');

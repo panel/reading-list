@@ -50,3 +50,17 @@ export function displayTitle(link: { title: string | null; url: string }): strin
 export function wantsDropCap(text: string | null): boolean {
 	return (text?.trim().length ?? 0) >= 90;
 }
+
+/**
+ * Splits a search snippet (matches wrapped in \u0001…\u0002 by the server) into
+ * plain-text segments, so highlights render as <mark> without any HTML parsing.
+ */
+export function highlightSegments(snippet: string): { text: string; match: boolean }[] {
+	const segments: { text: string; match: boolean }[] = [];
+	for (const part of snippet.split('\u0001')) {
+		const [matched, rest] = part.includes('\u0002') ? part.split('\u0002', 2) : [null, part];
+		if (matched) segments.push({ text: matched, match: true });
+		if (rest) segments.push({ text: rest, match: false });
+	}
+	return segments;
+}

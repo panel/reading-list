@@ -288,6 +288,17 @@ pipeline.
   your clipboard. This is the "I share it all the time" path.
 - **Done when:** you can find and copy a reference link in under 5 seconds
   from anywhere in the app.
+- **Status:** built. Migration 0006 (hand-written) adds the FTS5 table `links_fts` (porter +
+  unicode61, sharing rowids with `links`) with triggers on `links` and `link_tags`, and backfills
+  existing links. The query syntax is parsed in `packages/core/src/search.ts`: words match as
+  prefixes, "phrases" match exactly, `-word` excludes, plus `tag:`/`#tag`, `site:` and
+  `is:ref|queued|archived`. Ranking uses bm25 with the title and tags weighted highest. Snippet
+  highlights use control-character markers that the UI renders as `<mark>` without parsing
+  HTML. The Library is search scoped to `is:ref`, with tag and site facets. The ⌘K / `/`
+  palette copies with Enter and opens with ⌘Enter, and never acts on results from a previous
+  query. On mobile, Library replaces Archive in the tab bar; Archive is linked from the
+  Library. Note: `wrangler d1 export` can't export virtual tables such as `links_fts`; the
+  index can be rebuilt from `links`.
 
 ### Slice 8: Housekeeping
 - OPML import/export (bring existing subscriptions over).

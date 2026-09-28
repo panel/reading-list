@@ -123,6 +123,14 @@ in the UI, including buttons, swipe hints and shortcuts.
   opens an inline note-and-tags editor. Keys: `L` later, `S` star, `J`/`E` next,
   `O` original.
 
+**Search, Library and the palette:**
+
+- `/search`: search boxes take free text plus `tag:`, `site:`, `is:ref|queued|archived`,
+  "phrases" and `-word`. Matches are highlighted, and each result has a copy-link button.
+- **Library**: starred references, newest star first, browsable by tag and site.
+- **⌘K** (or `/`) anywhere: find a link, `↵` copies its URL, `⌘↵` opens it.
+  On mobile, the search icon in the header opens `/search`.
+
 **Saved links (not feed posts): link out.**
 
 - A preview box built from og:image, site and favicon, og:title,

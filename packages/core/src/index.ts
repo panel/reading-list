@@ -25,3 +25,4 @@ export {
 	type FoundFeed,
 	type RefreshResult
 } from './feeds/refresh';
+export { parseSearch, toFtsMatch, isEmptySearch, type SearchQuery, type SearchIs } from './search';

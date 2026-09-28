@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, hostname, relativeDay, siteLabel, toneFor, wantsDropCap } from './format';
+import {
+	displayTitle,
+	highlightSegments,
+	hostname,
+	relativeDay,
+	siteLabel,
+	toneFor,
+	wantsDropCap
+} from './format';
 
 describe('relativeDay', () => {
 	const now = new Date(2026, 8, 28, 15, 0); // Monday, Sep 28 2026
@@ -50,5 +58,25 @@ describe('wantsDropCap', () => {
 		expect(wantsDropCap('short note')).toBe(false);
 		expect(wantsDropCap(null)).toBe(false);
 		expect(wantsDropCap('x'.repeat(120))).toBe(true);
+	});
+});
+
+describe('highlightSegments', () => {
+	it('splits marked matches from plain text', () => {
+		expect(highlightSegments('Why the \u0001queue\u0002 should be \u0001empt\u0002ied')).toEqual([
+			{ text: 'Why the ', match: false },
+			{ text: 'queue', match: true },
+			{ text: ' should be ', match: false },
+			{ text: 'empt', match: true },
+			{ text: 'ied', match: false }
+		]);
+	});
+
+	it('keeps markup-looking text as text', () => {
+		expect(highlightSegments('<b>\u0001x\u0002</b>')).toEqual([
+			{ text: '<b>', match: false },
+			{ text: 'x', match: true },
+			{ text: '</b>', match: false }
+		]);
 	});
 });

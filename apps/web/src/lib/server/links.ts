@@ -36,7 +36,10 @@ export function chooseCanonical(finalUrl: string, pageCanonical: string | null):
 export function mergeNote(existing: string | null, incoming: string | null | undefined) {
 	const next = incoming?.trim();
 	if (!next) return existing;
-	if (!existing?.trim() || existing.includes(next)) return existing?.trim() ? existing : next;
+	if (!existing?.trim()) return next;
+	// Ignore whitespace differences (a pasted note vs. one with line breaks).
+	const squash = (text: string) => text.replace(/\s+/g, ' ').toLowerCase();
+	if (squash(existing).includes(squash(next))) return existing;
 	return `${existing.trim()}\n\n${next}`;
 }
 
@@ -108,7 +111,7 @@ export async function saveLink(
 	return { link, existed: Boolean(existing) };
 }
 
-async function withTags(db: Db, rows: Link[]): Promise<LinkWithTags[]> {
+export async function withTags(db: Db, rows: Link[]): Promise<LinkWithTags[]> {
 	if (rows.length === 0) return [];
 	const tagRows = await db
 		.select({ linkId: linkTags.linkId, name: tags.name })

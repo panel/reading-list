@@ -9,7 +9,9 @@
 	import './layout.css';
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
+	import Palette from '$lib/components/Palette.svelte';
 	import Toast from '$lib/components/Toast.svelte';
+	import { palette } from '$lib/palette.svelte';
 
 	let { children, data } = $props();
 	const badge = (n: number) => (n > 99 ? '99+' : String(n));
@@ -22,7 +24,11 @@
 			icon: 'M5 5a14 14 0 0 1 14 14M5 11a8 8 0 0 1 8 8M6 18h.01'
 		},
 		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
-		{ href: resolve('/archive'), label: 'Archive', icon: 'M3 8h18v12H3zM5 4h14l2 4H3zM10 12h4' },
+		{
+			href: resolve('/library'),
+			label: 'Library',
+			icon: 'M4 4h5v16H4zM10 4h4v16h-4zM15.5 5l3.8-1 2.7 15.6-3.8 1z'
+		},
 		{
 			href: resolve('/settings'),
 			label: 'Settings',
@@ -69,6 +75,13 @@
 						>{/if}</a
 				>
 				<a
+					href={resolve('/library')}
+					aria-current={isActive(resolve('/library')) ? 'page' : undefined}
+					class="border-b-2 py-1.5 {isActive(resolve('/library'))
+						? 'border-accent text-ink'
+						: 'border-transparent text-ink-2 hover:text-ink'}">Library</a
+				>
+				<a
 					href={resolve('/archive')}
 					aria-current={isActive(resolve('/archive')) ? 'page' : undefined}
 					class="border-b-2 py-1.5 {isActive(resolve('/archive'))
@@ -84,6 +97,40 @@
 				>
 			</nav>
 			<div class="flex-1"></div>
+			<button
+				type="button"
+				onclick={() => (palette.open = true)}
+				class="hidden h-10 w-64 items-center gap-2.5 rounded-md border border-rule-strong bg-surface px-3 font-ui text-sm text-ink-3 hover:border-ink lg:flex"
+			>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg
+				>
+				<span class="flex-1 text-left">Find a link…</span>
+				<kbd class="rounded border border-rule px-1.5 text-xs">⌘K</kbd>
+			</button>
+			<a
+				href={resolve('/search')}
+				aria-label="Search"
+				class="-mr-2 flex h-11 w-11 items-center justify-center text-ink lg:hidden"
+			>
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg
+				>
+			</a>
 			<a
 				href={resolve('/save')}
 				class="hidden h-10 items-center rounded-md border border-ink bg-ink px-4.5 font-ui text-sm font-bold text-paper hover:bg-accent-strong lg:flex"
@@ -97,6 +144,7 @@
 	</main>
 
 	<Toast />
+	<Palette />
 
 	<nav
 		aria-label="Sections"
