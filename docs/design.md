@@ -7,7 +7,7 @@ this file disagree, this file wins.
 
 ## Direction
 
-Light mode only. Editorial: big images, expressive serif headlines, drop caps,
+Light mode only, on a cool paper tinted toward the blue-green accent. Editorial: big images, expressive serif headlines, drop caps,
 thin rules, generous whitespace. Built mobile-first (iPhone, Chrome), with a
 desktop layout that reads like a front page.
 
@@ -20,6 +20,19 @@ desktop layout that reads like a front page.
 | UI labels, kickers, buttons, metadata | **Atkinson Hyperlegible** | Designed for legibility at small sizes. Kickers: 11–13px, bold, uppercase, +0.1em tracking. |
 
 Self-host the fonts (subset woff2) rather than loading from Google Fonts.
+
+### Letterpress
+
+Headlines, the wordmark, pull quotes, list titles and drop caps get a slight
+"pressed into paper" impression: a 1px white highlight below and a faint ink
+shadow above.
+
+```css
+text-shadow: 0 1px 0 rgb(255 255 255 / 0.85), 0 -1px 0 rgb(21 32 32 / 0.07);
+```
+
+Only on display type (roughly 20px and up). Never on body text, where it would
+blur small letterforms.
 
 ### Reading rules
 
@@ -49,15 +62,15 @@ What the evidence supports, and what is convention:
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `paper` | `#FBF8F3` | Page background |
+| `paper` | `#F4F8F7` | Page background, a cool off-white tinted toward the accent |
 | `surface` | `#FFFFFF` | Cards, inputs |
-| `sunk` | `#F3EEE5` | Your-note callout |
-| `ink` | `#1C1915` | Body text, primary buttons |
-| `ink-2` | `#5B5249` | Secondary text (≈7:1) |
-| `ink-3` | `#6E655B` | Captions, hints (≈5.3:1) |
-| `rule` | `#E6DFD4` | Hairlines, card borders |
-| `rule-strong` | `#D8CFC2` | Button and input borders |
-| `accent` | `#1E6A73` | Blue-green: kickers, drop caps, links, "Later" (≈5.9:1 on paper) |
+| `sunk` | `#E7EFEE` | Your-note callout |
+| `ink` | `#152020` | Body text, primary buttons (≈16:1) |
+| `ink-2` | `#475756` | Secondary text (≈7:1) |
+| `ink-3` | `#5A6B6A` | Captions, hints (≈5.3:1; ≈4.7:1 on `sunk`) |
+| `rule` | `#D9E4E3` | Hairlines, card borders |
+| `rule-strong` | `#C5D3D2` | Button and input borders |
+| `accent` | `#1E6A73` | Blue-green: kickers, drop caps, links, "Later" (≈5.8:1 on paper) |
 | `accent-strong` | `#154E55` | Link hover and pressed |
 
 One accent only. "Finished" uses `ink` and "Later" uses `accent`, so the two
