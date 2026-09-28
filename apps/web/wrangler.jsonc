@@ -1,0 +1,34 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "reading-list",
+	"compatibility_date": "2026-09-28",
+	"compatibility_flags": ["nodejs_als"],
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	// The app is only reachable through the custom domain, where Cloudflare Access
+	// sits in front of it. No workers.dev or preview URLs; those would skip Access
+	// (requests without a valid Access JWT are rejected by the app anyway).
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [{ "pattern": "read.example.com", "custom_domain": true }],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "reading-list",
+			// Replace with the id printed by `wrangler d1 create reading-list` (see docs/setup.md).
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "../../migrations"
+		}
+	],
+	"vars": {
+		// e.g. "https://yourteam.cloudflareaccess.com" (see docs/setup.md)
+		"ACCESS_TEAM_DOMAIN": "",
+		// The Application Audience (AUD) tag from the Access application
+		"ACCESS_AUD": "",
+		// Local development only; set it in .dev.vars. Ignored in production builds.
+		"DEV_USER_EMAIL": ""
+	}
+}

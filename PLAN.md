@@ -127,7 +127,7 @@ pipeline.
 
 ### Slice 0: Walking skeleton
 *"A deployed page, behind login, that reads from D1."*
-- pnpm monorepo: `apps/web` (SvelteKit), `workers/fetcher`, `packages/core`
+- pnpm monorepo: `apps/web` (SvelteKit, bootstrapped with `sv`), `packages/core`
   (schema, types, shared logic such as URL canonicalization and feed parsing).
 - `wrangler.toml` with a D1 binding and a first migration (`users`, `links`).
 - App on a subdomain of your custom domain (e.g. `read.yourdomain.com`), with a
@@ -135,6 +135,17 @@ pipeline.
   and upserts the user into `locals.user`.
 - GitHub Action: typecheck, test, migrate, deploy on push to `main`.
 - **Done when:** visiting the URL asks you to log in and then shows "0 saved links".
+- **Status:** built and verified locally. Deploying needs the one-time
+  Cloudflare setup in `docs/setup.md` (D1 database id, subdomain, Access app,
+  GitHub secrets). The `fetcher` Worker waits for Slice 5, when it's first needed.
+
+> **⏸ Design checkpoint (before Slice 1's UI).** Slice 0 ships an unstyled
+> page on purpose. Before building the first real screens (queue cards, save
+> form, and after that the feed inbox and library), **stop and talk through
+> design**: visual direction, layout and navigation (sidebar vs. tabs, mobile
+> first?), typography and density, how to style it (plain CSS / Tailwind /
+> component library), and light/dark mode. The server side of Slice 1 can go
+> ahead in the meantime; the screens wait until that conversation happens.
 
 ### Slice 1: Save a link by hand
 *"Paste a URL, add a note and tags, and see it in my queue."*
