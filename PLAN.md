@@ -145,6 +145,11 @@ pipeline.
 > first?), typography and density, how to style it (plain CSS / Tailwind /
 > component library), and light/dark mode. The server side of Slice 1 can go
 > ahead in the meantime; the screens wait until that conversation happens.
+>
+> **Done:** decisions are in [`docs/design.md`](docs/design.md). In short: light
+> editorial look, Fraunces/Literata/Atkinson Hyperlegible, blue-green accent, Tailwind. Saved
+> links open the original site behind a preview box; feed posts are read in the app. Actions are
+> named **Later** / **Finished**, with swipe in the queue only.
 
 ### Slice 1: Save a link by hand
 *"Paste a URL, add a note and tags, and see it in my queue."*
