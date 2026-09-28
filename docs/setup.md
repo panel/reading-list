@@ -27,24 +27,40 @@ Other commands (from the repo root): `pnpm lint`, `pnpm check`, `pnpm test`,
 
 ## One-time Cloudflare setup
 
-The app is served at `reader.nelsonfamily.fyi`.
+The app is served at `reader.nelsonfamily.fyi`. `nelsonfamily.fyi` must be a
+zone on your Cloudflare account, with no existing DNS record for `reader`
+(the first deploy creates it, along with the certificate).
 
-1. **Create the database**
+Order matters a little: deploy the Worker first so the hostname exists, then
+put Access in front of it. That's safe because until Access is configured the
+app refuses every request with a 500.
+
+1. **Log in and create the database** (run from the repo root)
 
    ```sh
+   pnpm install
    pnpm --filter web exec wrangler login
    pnpm --filter web exec wrangler d1 create reading-list
    ```
 
-   Put the printed `database_id` in `apps/web/wrangler.jsonc`.
+   If wrangler offers to add the binding to your config, say **no**. Instead
+   put the printed `database_id` into the existing `DB` entry in
+   `apps/web/wrangler.jsonc`.
 
-2. **Subdomain.** `apps/web/wrangler.jsonc` already routes the Worker to
-   `reader.nelsonfamily.fyi` as a custom domain. `nelsonfamily.fyi` must be a zone
-   on your Cloudflare account; `wrangler deploy` creates the DNS record and
-   certificate. There must not already be a DNS record for `reader`.
+2. **Create the tables and deploy**
+
+   ```sh
+   pnpm --filter web db:migrate:remote
+   pnpm build
+   pnpm --filter web exec wrangler deploy
+   ```
+
+   Open `https://reader.nelsonfamily.fyi`. You should get
+   *"Cloudflare Access is not configured"*. That means the Worker is up and
+   locked. The DNS record and certificate can take a minute or two to appear.
 
 3. **Put Cloudflare Access in front of it** (Zero Trust dashboard → Access →
-   Applications → Add → Self-hosted):
+   Applications → Add an application → Self-hosted):
    - Application domain: `reader.nelsonfamily.fyi`
    - Policy: Allow, Include → Emails → your email
    - After saving, copy the **Application Audience (AUD) tag** from the
@@ -53,15 +69,18 @@ The app is served at `reader.nelsonfamily.fyi`.
      (`https://<team>.cloudflareaccess.com`).
 
    Set both in `apps/web/wrangler.jsonc` under `vars` (`ACCESS_AUD`,
-   `ACCESS_TEAM_DOMAIN`). Neither is secret.
+   `ACCESS_TEAM_DOMAIN`). Neither is secret. Then deploy again
+   (`pnpm build && pnpm --filter web exec wrangler deploy`). Now the URL asks
+   you to log in, then shows the home page.
 
    The app checks the Access JWT on every request and rejects anything without
    a valid one, so it stays closed even if Access were misconfigured.
 
-4. **Let GitHub Actions deploy.** Create an API token (My Profile → API Tokens →
-   Create Token → "Edit Cloudflare Workers" template, then add
+4. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
+   API Tokens → Create Token → "Edit Cloudflare Workers" template, then add
    **Account → D1 → Edit**). In the GitHub repo settings:
    - Secrets → Actions: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
    - Variables → Actions: `DEPLOY_ENABLED` = `true`
 
-   Every push to `main` then runs checks, applies migrations, and deploys.
+   Commit the `wrangler.jsonc` changes from steps 1 and 3. Every push to
+   `main` then runs checks, applies migrations, and deploys.
