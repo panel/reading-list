@@ -1,0 +1,243 @@
+# Reading List — Plan
+
+A personal RSS reader, read-later queue, and reference library in one app,
+running on Cloudflare's free tier.
+
+## The three jobs
+
+| Job | What happens | Main view |
+| --- | --- | --- |
+| **Follow** | New posts from authors I subscribe to show up automatically | Feed inbox |
+| **Save** | I send a link (with an optional note and tags) from anywhere to read later | Queue |
+| **Reference** | Articles I cite and share often live somewhere I can find them fast | Library + search |
+
+The core idea: **everything is a link**. A feed entry is a link I haven't
+decided about yet. Saving it (or sending one in by hand) promotes it to a
+*saved link*, which then moves through a lifecycle:
+
+```
+feed entry ──save──▶ queued ──read──▶ archived
+                        │                 │
+                        └──── ★ reference ◀┘   (a flag, not a state: anything can be starred)
+```
+
+## Stack
+
+**All TypeScript, all Cloudflare. No Go.**
+
+- **SvelteKit + `@sveltejs/adapter-cloudflare`**, deployed as a Worker. It serves
+  both the UI and the JSON API (`+server.ts` routes).
+- **A second small Worker (`fetcher`)** for the cron job that polls feeds.
+  SvelteKit's adapter doesn't expose a `scheduled()` handler, and keeping feed
+  polling separate keeps its CPU budget separate too. Both Workers bind the same
+  D1 database.
+- **D1 (SQLite)** for everything. It supports **FTS5**, which covers full-text
+  search with no extra service.
+- **Cloudflare Access (Zero Trust, free up to 50 users)** for login. It sits in
+  front of the app, so there's no auth code to write, and it hands the app a
+  signed identity (email) on every request.
+- **Drizzle ORM** for typed queries. Migrations are hand-written SQL through
+  `wrangler d1 migrations`, because Drizzle can't model FTS5 virtual tables or
+  triggers.
+- **`fast-xml-parser`** for RSS/Atom. **`HTMLRewriter`** (built into Workers)
+  for pulling `<title>`, `og:*` tags, and feed `<link rel="alternate">` out of
+  pages. It streams, so it uses very little CPU.
+- Later, optionally: **R2** for archived page snapshots; **Workers AI +
+  Vectorize** for "find things like this" semantic search. Both have free tiers.
+
+### Why not Go
+
+- Go on Workers means TinyGo compiled to WASM: a limited standard library, awkward
+  `net/http`, and bigger bundles, all to hit the same D1 bindings.
+- Cloudflare Containers (the way to run a real Go server) need a paid plan.
+- Hosting Go somewhere else splits the app across two platforms and leaves the
+  free tier.
+- The workload is I/O-bound glue (fetch a feed, parse it, write rows), so Go's
+  strengths don't come into play.
+
+Go would only make sense if you later want to move this off Cloudflare. The
+schema is plain SQLite, so that stays possible.
+
+### Free-tier constraints that shape the design
+
+| Limit (Workers Free) | Impact | Design response |
+| --- | --- | --- |
+| **10 ms CPU** per invocation (waiting on network doesn't count) | Parsing a big feed or running readability on a long article can go over | Parse feeds one per invocation (fan out); get metadata with streaming `HTMLRewriter`; leave full-text extraction until later and keep it optional |
+| **50 subrequests** per invocation | One cron run can't fetch 200 feeds | The cron picks the N feeds that are due most, fetches ≤ ~40, and the rest wait for the next tick. Or it fans out through a service binding so each call gets its own budget |
+| **100k requests/day** | More than enough for one person | — |
+| **D1: 5M rows read / 100k rows written per day, 5 GB** | Unindexed scans and FTS rebuilds count against reads | Index every query path; prune old unsaved feed entries; use conditional GET so an unchanged feed writes nothing |
+| **5 cron triggers** per account | Fine | One trigger (e.g. every 15 min); per-feed `next_fetch_at` decides what actually gets fetched |
+
+## Multi-user: yes, cheaply
+
+Put a `user_id` column on every owned table from day one, and scope every query
+through one helper (`db.forUser(userId)`). That's about all multi-user costs
+here. Cloudflare Access already provides identity, so you get users by adding an
+email to the Access policy. **Deploy it single-user; the schema is multi-user
+ready.** What we're *not* building: signup flows, per-user quotas, admin UI.
+
+Feeds themselves are shared (`feeds` has one row per URL, fetched once) and
+users hold `subscriptions` to them, so two users following the same blog don't
+double the fetches.
+
+## Data model (first cut)
+
+```sql
+users          (id, email UNIQUE, created_at)
+api_tokens     (id, user_id, name, token_hash, last_used_at, created_at)   -- for bookmarklet / phone capture
+
+feeds          (id, url UNIQUE, site_url, title, etag, last_modified,
+                last_fetched_at, next_fetch_at, error_count, last_error)
+subscriptions  (user_id, feed_id, title_override, folder, created_at, PK(user_id, feed_id))
+feed_entries   (id, feed_id, guid, url, title, author, summary, published_at,
+                UNIQUE(feed_id, guid))
+entry_state    (user_id, entry_id, read_at, dismissed_at, PK(user_id, entry_id))
+
+links          (id, user_id, url, canonical_url, title, site_name, author,
+                description, note, status CHECK(status IN ('queued','archived')),
+                is_reference, source CHECK(source IN ('manual','feed')),
+                source_entry_id NULL, saved_at, read_at, updated_at,
+                UNIQUE(user_id, canonical_url))
+tags           (id, user_id, name, UNIQUE(user_id, name))
+link_tags      (link_id, tag_id, PK(link_id, tag_id))
+
+links_fts      -- FTS5 over title, description, note, site_name, author, tag names;
+               -- kept in sync by triggers
+```
+
+Decisions baked in:
+
+- **`feed_entries` and `links` are separate tables.** Entries are high volume and
+  disposable, so unsaved ones older than N days get pruned. Links are curated
+  and kept forever. Saving an entry copies it into `links` with a pointer back.
+- **`canonical_url` dedupes.** Strip `utm_*` and fragments, and normalize the host.
+  Saving the same article twice updates it instead of creating a duplicate.
+- **Reference is a flag, not a status.** An article can be starred as a
+  reference whether or not you've "read" it in queue terms.
+
+## Order of work: vertical slices
+
+Each slice ships something usable end to end (UI → API → DB → deployed) and
+builds on the one before. The first few are small on purpose, to prove the
+pipeline.
+
+### Slice 0: Walking skeleton
+*"A deployed page, behind login, that reads from D1."*
+- pnpm monorepo: `apps/web` (SvelteKit), `workers/fetcher`, `packages/core`
+  (schema, types, shared logic such as URL canonicalization and feed parsing).
+- `wrangler.toml` with a D1 binding and a first migration (`users`, `links`).
+- Cloudflare Access app on the domain; `hooks.server.ts` verifies the Access JWT
+  and upserts the user into `locals.user`.
+- GitHub Action: typecheck, test, migrate, deploy on push to `main`.
+- **Done when:** visiting the URL asks you to log in and then shows "0 saved links".
+
+### Slice 1: Save a link by hand
+*"Paste a URL, add a note and tags, and see it in my queue."*
+- Form: URL, note, tags (comma or chip input).
+- Server: canonicalize the URL, fetch the page, use `HTMLRewriter` to get title,
+  description, site name, and `og:image`. Upsert the link and its tags.
+- Queue view: newest first; each card shows title, site, note, and tags.
+- **Done when:** you can save three real articles and see them with their titles filled in.
+
+### Slice 2: Capture from anywhere
+*"Save from my phone and browser without opening the app."*
+- `api_tokens` table, a settings page to create or revoke tokens, and
+  `POST /api/links` with a Bearer token (Access bypass rule for `/api/*`;
+  the token *is* the auth there).
+- A bookmarklet that opens a small prefilled save popup (so you can add a
+  note and tags).
+- An iOS Shortcut / Android share target: make the app a PWA with a
+  `share_target` in the manifest.
+- **Done when:** sharing from your phone's share sheet adds the link to the queue.
+
+### Slice 3: Queue workflow
+*"Actually work through the reading list."*
+- Mark as read (→ archived), un-archive, delete, edit note and tags.
+- Views: Queue / Archive; filter by tag.
+- Keyboard shortcuts (`j`/`k`, `e` archive, `s` star).
+- **Done when:** the queue can go from 10 items to 0 in one sitting, and each
+  one is still findable afterwards.
+
+### Slice 4: Subscribe to a feed (manual refresh)
+*"Add an author and see their recent posts."*
+- Paste a site *or* feed URL. If it's HTML, find the feed through
+  `<link rel="alternate">`. Create the `feeds` and `subscriptions` rows.
+- Parse RSS 2.0 / Atom / JSON Feed in `packages/core` and upsert `feed_entries`.
+- A "Refresh" button fetches right away (there's no cron yet).
+- Feed inbox: entries from your subscriptions, unread first.
+- **Done when:** you subscribe to 3 authors and see their posts.
+
+### Slice 5: Automatic polling
+*"New posts show up without me doing anything."*
+- `workers/fetcher` with a `*/15 * * * *` cron: select feeds where
+  `next_fetch_at <= now`, limited to the subrequest budget.
+- Conditional GET (`If-None-Match` / `If-Modified-Since`); a 304 writes nothing.
+- Backoff: more errors → a longer `next_fetch_at`; show broken feeds in the UI.
+- Adaptive interval: feeds that rarely post get checked less often.
+- Unread counts per feed in the sidebar.
+- **Done when:** a new post from a followed author shows up within ~15 min
+  and nobody pressed anything.
+
+### Slice 6: Entry → queue / reference
+*"This is where the three jobs connect."*
+- Actions on an entry: **Save to queue**, **Star as reference**, **Dismiss**, **Mark read**.
+- Saving copies the entry into `links` (dedup on `canonical_url`) and opens the
+  note/tag editor inline.
+- Mark all read (per feed / all).
+- **Done when:** you can triage the feed inbox to empty, with keepers in the
+  queue or library.
+
+### Slice 7: Reference library and search
+*"Find the article I always cite, fast."*
+- FTS5 table and triggers; `/search?q=` with ranked results and highlighted
+  snippets.
+- Library view: starred links, browsable by tag, site/author, and date saved.
+- Search syntax: free text plus `tag:x`, `site:y`, `is:ref`, `is:queued`.
+- Command palette (`⌘K`) for find-and-copy: pick a result and its URL is on
+  your clipboard. This is the "I share it all the time" path.
+- **Done when:** you can find and copy a reference link in under 5 seconds
+  from anywhere in the app.
+
+### Slice 8: Housekeeping
+- OPML import/export (bring existing subscriptions over).
+- Retention: a nightly prune of unsaved `feed_entries` older than 30 days.
+- Folders/groups for subscriptions.
+- Export all links as JSON/CSV (your data is yours).
+
+### Later / optional slices (pick by appetite)
+- **Snapshots:** keep a readable copy of reference articles in R2 so
+  link-rot doesn't eat your library. (Readability may need to run off the
+  request path because of CPU limits.)
+- **Semantic search:** embed title, description, and note with Workers AI and
+  store them in Vectorize; "more like this" on any link.
+- **Public share pages:** a read-only public URL for a tag or collection
+  (e.g. "my favorite articles on testing").
+- **Email-in:** forward newsletters to an address and have them show up as
+  entries (Email Workers).
+- **Digest:** a weekly email of what's still in the queue.
+
+## Repo layout (target)
+
+```
+apps/web/            SvelteKit app (UI + /api)
+  src/lib/server/    db access, auth hook, capture handlers
+  src/routes/        queue, feeds, library, search, settings
+workers/fetcher/     cron Worker: poll feeds, write entries
+packages/core/       schema, types, canonicalizeUrl, parseFeed, extractMeta — unit-tested, no CF deps
+migrations/          numbered SQL migrations (shared by both workers)
+```
+
+`packages/core` is pure TypeScript with Vitest tests. Feed parsing and URL
+canonicalization are where the subtle bugs live, so they get fixture tests
+using real-world feeds.
+
+## Open questions
+
+1. **Roughly how many feeds?** Tens vs. hundreds decides whether Slice 5 needs
+   the fan-out design or a single cron batch is enough.
+2. **Phone: iOS or Android?** This affects Slice 2: an iOS Shortcut vs. a PWA
+   share target (Android handles that far better).
+3. **Custom domain on Cloudflare?** Access is easiest with one; `*.workers.dev`
+   works but is clunkier.
+4. **Public sharing** of references: is it wanted eventually? If so, keep
+   `links` IDs non-sequential (ULIDs) from the start.
