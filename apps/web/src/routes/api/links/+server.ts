@@ -1,50 +1,20 @@
-import { json } from '@sveltejs/kit';
-import { InvalidUrlError } from '@reading-list/core';
-import { apiError, parseSaveLinkBody } from '$lib/server/api';
-import { saveLink } from '$lib/server/links';
-import { hasScope } from '$lib/server/tokens';
-import { displayTitle } from '$lib/format';
+import { jsonBody, runOp } from '$lib/server/api';
+import { saveLinkOp, searchLinksOp } from '$lib/server/agent';
 import type { RequestHandler } from './$types';
 
-/** Save a link. Used by the iOS Shortcut; see docs/ios-shortcut.md. */
-export const POST: RequestHandler = async ({ request, locals, url }) => {
-	if (!locals.apiToken || !hasScope(locals.apiToken, 'links:write')) {
-		return apiError(403, 'This token can’t save links');
-	}
-
-	let body: unknown;
-	try {
-		body = await request.json();
-	} catch {
-		return apiError(400, 'Send a JSON object like {"url": "https://…"}');
-	}
-
-	let result;
-	try {
-		result = await saveLink(locals.db, locals.user.id, parseSaveLinkBody(body));
-	} catch (err) {
-		if (err instanceof TypeError || err instanceof InvalidUrlError) {
-			return apiError(400, err.message);
-		}
-		throw err;
-	}
-
-	const { link, existed } = result;
-	const title = displayTitle(link);
-	return json(
-		{
-			ok: true,
-			existed,
-			message: existed ? `Already saved, moved to the back: ${title}` : `Saved: ${title}`,
-			link: {
-				id: link.id,
-				url: link.url,
-				title: link.title,
-				siteName: link.siteName,
-				note: link.note,
-				appUrl: new URL(`/links/${link.id}`, url).toString()
-			}
-		},
-		{ status: existed ? 200 : 201 }
+/** GET /api/links?q=…&limit=…: search (same syntax as the app), or the queue when q is empty. */
+export const GET: RequestHandler = (event) =>
+	runOp(event, (ctx) =>
+		searchLinksOp(ctx, {
+			query: event.url.searchParams.get('q') ?? '',
+			limit: event.url.searchParams.get('limit')
+		})
 	);
-};
+
+/** POST /api/links {url, note?, tags?}: save a link. Used by the iOS Shortcut. */
+export const POST: RequestHandler = (event) =>
+	runOp(
+		event,
+		async (ctx) => saveLinkOp(ctx, await jsonBody(event.request)),
+		(result) => (result.existed ? 200 : 201)
+	);

@@ -207,10 +207,35 @@ export const apiTokens = sqliteTable(
 	(t) => [index('api_tokens_user').on(t.userId)]
 );
 
+/**
+ * What API tokens (the Shortcut, agents) changed, so it can be reviewed and
+ * undone from Settings. `undo` is a JSON description of how to reverse it.
+ */
+export const activity = sqliteTable(
+	'activity',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		// Kept when a token is revoked, so history still says who did what.
+		tokenId: text('token_id'),
+		actor: text('actor').notNull(),
+		action: text('action').notNull(),
+		targetId: text('target_id'),
+		summary: text('summary').notNull(),
+		undo: text('undo'),
+		undoneAt: timestamp('undone_at'),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [index('activity_user_created').on(t.userId, t.createdAt)]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type ApiToken = typeof apiTokens.$inferSelect;
+export type Activity = typeof activity.$inferSelect;
 export type Feed = typeof feeds.$inferSelect;
 export type FeedEntry = typeof feedEntries.$inferSelect;

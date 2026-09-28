@@ -43,6 +43,7 @@ export async function createToken(
 	name: string,
 	scopes: Scope[] = ['links:write']
 ): Promise<{ token: string; record: ApiToken }> {
+	if (scopes.length === 0) throw new Error('A token needs at least one scope');
 	const token = generateToken();
 	const [record] = await db
 		.insert(apiTokens)
@@ -51,7 +52,7 @@ export async function createToken(
 			name: name.trim().slice(0, 80) || 'Untitled token',
 			tokenHash: await hashToken(token),
 			tokenPrefix: token.slice(0, TOKEN_PREFIX.length + 6),
-			scopes: scopes.join(' ')
+			scopes: [...new Set(scopes)].join(' ')
 		})
 		.returning();
 	return { token, record };

@@ -2,10 +2,11 @@
 	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
 	import { relativeDay } from '$lib/format';
-	import { SCOPES, type Scope } from '$lib/tokens';
+	import { PRESETS, SCOPES, type Scope } from '$lib/tokens';
 
 	let { data, form } = $props();
 	let copied = $state(false);
+	let preset = $state(PRESETS[0].id);
 
 	async function copy(text: string) {
 		await navigator.clipboard.writeText(text);
@@ -71,9 +72,10 @@
 			<h2 id="tokens-heading" class="kicker text-ink-2">API tokens</h2>
 		</div>
 		<p class="text-[1.0625rem] leading-[1.55]">
-			Tokens let the iPhone Shortcut save links without signing in. Make one per device, and revoke
-			it if the device is lost. Setup steps are in
-			<code class="font-ui text-[0.9375rem]">docs/ios-shortcut.md</code>.
+			Tokens let the iPhone Shortcut and AI agents use the app without signing in. Make one per
+			device or agent, and revoke it if it's lost. Setup steps are in
+			<code class="font-ui text-[0.9375rem]">docs/ios-shortcut.md</code> and
+			<code class="font-ui text-[0.9375rem]">docs/agents.md</code>.
 		</p>
 
 		{#if form?.created}
@@ -92,7 +94,8 @@
 					{copied ? 'Copied' : 'Copy token'}
 				</button>
 				<p class="font-ui text-[0.8125rem] text-ink-3">
-					API address: <span class="break-all text-ink-2">{data.apiUrl}</span>
+					API address: <span class="break-all text-ink-2">{data.apiUrl}</span><br />
+					MCP address: <span class="break-all text-ink-2">{data.mcpUrl}</span>
 				</p>
 			</div>
 		{/if}
@@ -114,6 +117,29 @@
 					>Create</button
 				>
 			</div>
+			<fieldset class="mt-1 flex flex-col gap-1.5">
+				<legend class="sr-only">What the token may do</legend>
+				{#each PRESETS as p (p.id)}
+					<label
+						class="flex cursor-pointer items-start gap-3 rounded-md border px-3.5 py-3 {preset ===
+						p.id
+							? 'border-accent bg-surface'
+							: 'border-rule'}"
+					>
+						<input
+							type="radio"
+							name="preset"
+							value={p.id}
+							bind:group={preset}
+							class="mt-1 accent-accent"
+						/>
+						<span class="flex flex-col gap-0.5">
+							<span class="font-ui font-bold text-ink">{p.label}</span>
+							<span class="font-ui text-[0.8125rem] text-ink-3">{p.hint}</span>
+						</span>
+					</label>
+				{/each}
+			</fieldset>
 			{#if form?.createError}
 				<p class="font-ui text-sm font-bold text-[#9b2c1f]">{form.createError}</p>
 			{/if}
@@ -150,6 +176,52 @@
 			</ul>
 		{:else}
 			<p class="font-ui text-[0.9375rem] text-ink-3">No tokens yet.</p>
+		{/if}
+	</section>
+
+	<section class="flex flex-col gap-3" aria-labelledby="activity-heading">
+		<div class="border-b-2 border-ink pb-3">
+			<h2 id="activity-heading" class="kicker text-ink-2">Agent activity</h2>
+		</div>
+		<p class="text-[1.0625rem] leading-[1.55]">
+			Changes made with a token, newest first. Undo puts things back the way they were.
+		</p>
+		{#if form?.undone}
+			<p role="status" class="font-ui text-sm font-bold text-accent">Undone: {form.undone}</p>
+		{/if}
+		{#if form?.undoError}
+			<p role="alert" class="font-ui text-sm font-bold text-[#9b2c1f]">{form.undoError}</p>
+		{/if}
+		{#if data.activity.length}
+			<ul class="flex flex-col">
+				{#each data.activity as item (item.id)}
+					<li class="flex items-center gap-3 border-b border-rule py-3">
+						<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+							<span
+								class="text-[0.9375rem] leading-snug {item.undoneAt
+									? 'text-ink-3 line-through'
+									: 'text-ink'}">{item.summary}</span
+							>
+							<span class="font-ui text-[0.8125rem] text-ink-3"
+								>{item.actor} · {relativeDay(item.createdAt)}</span
+							>
+						</div>
+						{#if item.canUndo}
+							<form method="POST" action="?/undo" use:enhance>
+								<input type="hidden" name="id" value={item.id} />
+								<button
+									class="h-11 rounded-md border border-rule-strong px-3.5 font-ui text-sm font-bold text-ink-2 hover:border-ink hover:text-ink"
+									>Undo</button
+								>
+							</form>
+						{:else if item.undoneAt}
+							<span class="font-ui text-sm text-ink-3">Undone</span>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="font-ui text-[0.9375rem] text-ink-3">Nothing yet.</p>
 		{/if}
 	</section>
 </div>

@@ -57,6 +57,13 @@
       "when": 1790624897979,
       "tag": "0007_subscription_folders",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790626762466,
+      "tag": "0008_activity",
+      "breakpoints": true
     }
   ]
 }

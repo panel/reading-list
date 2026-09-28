@@ -331,6 +331,23 @@ pipeline.
   can see and undo what an agent did.
 - **Done when:** an agent can "go through my unread feeds and queue anything
   about X, tagged X" and you can see exactly what it changed.
+- **Status:** built. Details and client setup are in `docs/agents.md`.
+  - Token scopes `links:read`, `links:write`, `feeds:read`, `feeds:write`. Settings offers
+    three presets: iPhone Shortcut (save only), Read-only agent, and Agent (everything).
+  - REST: `GET /api/links?q=` (search, or the queue), `GET`/`PATCH /api/links/:id`,
+    `GET /api/feeds`, `GET /api/entries`, `GET /api/entries/:id` (with text), and
+    `POST /api/entries/:id {action}` (later/star/dismiss/read/unread). Search lives on
+    `/api/links?q=` rather than a separate `/api/search`.
+  - MCP at `/api/mcp` (under `/api` so the existing Access bypass covers it): stateless
+    Streamable HTTP with JSON responses and nine tools over the same operations
+    (`lib/server/agent.ts`). The claude.ai web connectors need OAuth, which isn't built;
+    Claude Code, Claude Desktop and scripts work with the Bearer header.
+  - Instead of an `actor` column on every table, an `activity` log (migration 0008)
+    records each token write with the token name, a summary and an undo recipe. Settings
+    → Agent activity lists them with Undo (new saves are deleted; edits and triage
+    restore the previous snapshot).
+  - Checked end to end on the dev server: scope refusals (403 over REST, `isError` over
+    MCP), MCP initialize/notifications/tools, and undo of a triage and of an edit.
 
 ### Later / optional slices (pick by appetite)
 - **Snapshots:** keep a readable copy of reference articles in R2 so
