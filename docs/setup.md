@@ -84,6 +84,11 @@ app refuses every request with a 500.
    - Domain: subdomain `reader`, domain `nelsonfamily.fyi`, path `api/`
    - Policy: action **Bypass**, Include → **Everyone**
 
+   If the dashboard says **another application owns that destination**, the
+   path is missing: without it the new app claims the same hostname as the
+   main one. Fill in the path (`api`), so you end up with two apps,
+   `reader.nelsonfamily.fyi` (login) and `reader.nelsonfamily.fyi/api` (bypass).
+
    Access applies the most specific path, so everything outside `/api/` still
    requires login. The app enforces this on its side too: a token works only
    on `/api/*`, and `/api/*` never accepts anything but a token.
