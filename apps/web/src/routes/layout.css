@@ -100,7 +100,11 @@
 			-webkit-hyphens: manual;
 		}
 	}
-	.prose > * + * {
+	/* Space between blocks at any depth: many feeds wrap the whole post in a <div>. */
+	.prose > * + *,
+	.prose
+		:is(p, div, section, ul, ol, blockquote, figure, pre, table, hr, h1, h2, h3, h4, h5, h6)
+		+ :is(p, div, section, ul, ol, blockquote, figure, pre, table, hr, h1, h2, h3, h4, h5, h6) {
 		margin-top: 1em;
 	}
 	/* Drop cap on the first paragraph when it opens the piece. */
