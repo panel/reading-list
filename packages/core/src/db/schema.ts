@@ -164,7 +164,9 @@ export const feedEntries = sqliteTable(
 	},
 	(t) => [
 		uniqueIndex('feed_entries_feed_guid').on(t.feedId, t.guid),
-		index('feed_entries_feed_published').on(t.feedId, t.publishedAt)
+		index('feed_entries_feed_published').on(t.feedId, t.publishedAt),
+		// Finds the post behind a link shared in by hand (same URL).
+		index('feed_entries_url').on(t.url)
 	]
 );
 

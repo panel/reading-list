@@ -373,6 +373,11 @@ pipeline.
   Shared (now newest first), and `triage_entry` `later` adds a post to Shared.
   Also: paragraph spacing in the reader now applies inside the wrapper `<div>` many
   feeds put around a post.
+- **Follow-up:** a shared link that is also a post in a feed you follow (saved from it, or
+  the same URL) reads in the app on its link page, with its note and Done bar, and opening
+  it marks the post read. Migration 0010 indexes `feed_entries.url` for that lookup.
+  Starring from either reader opens the note-and-tags editor; once starred, the post
+  reader shows your note with an Edit button.
 
 ### Later / optional slices (pick by appetite)
 - **Snapshots:** keep a readable copy of reference articles in R2 so

@@ -112,6 +112,10 @@ the UI, including buttons, swipe hints and shortcuts.
   (saved with the link, searchable), and **Up next**.
 - A sticky bottom bar: ☆ / Copy link / Next →. Next opens the top of the
   inbox, whether that's a post or a shared link.
+- ☆ opens a note-and-tags editor after the article, so a reference can say
+  why it's worth keeping. Once starred, the note shows there with Edit.
+- A shared link that is also a post in a feed you follow reads the same way,
+  on its link page: header, your note, the article, then Done.
 - **No swipe in the reader.** Chrome on iOS uses edge-swipe for back, and
   horizontal swipes happen by accident while scrolling or selecting text. You
   move to the next article by reaching the end and choosing.

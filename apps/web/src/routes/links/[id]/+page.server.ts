@@ -1,4 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { stripTags } from '@reading-list/core';
+import { entryForLink } from '$lib/server/entries';
 import {
 	appendNote,
 	deleteLink,
@@ -11,6 +13,7 @@ import {
 	starLink
 } from '$lib/server/links';
 import { nextInboxItem } from '$lib/server/inbox';
+import { readingMinutes, sanitizeEntryHtml, withoutOpeningImage } from '$lib/server/sanitize';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -21,7 +24,33 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	return { link, notice, next: await nextInboxItem(locals.db, locals.user.id, link.id) };
+	const [next, entry] = await Promise.all([
+		nextInboxItem(locals.db, locals.user.id, link.id),
+		entryForLink(locals.db, locals.user.id, link)
+	]);
+	// A post from a feed you follow reads in the app, like it does from the inbox.
+	const html = entry?.content
+		? withoutOpeningImage(
+				sanitizeEntryHtml(entry.content, entry.url ?? entry.siteUrl ?? entry.feedUrl),
+				link.imageUrl
+			)
+		: '';
+	return {
+		link,
+		notice,
+		next,
+		post: html
+			? {
+					id: entry!.id,
+					feedTitle: entry!.feedTitle,
+					author: entry!.author,
+					date: entry!.publishedAt ?? entry!.createdAt,
+					read: Boolean(entry!.readAt),
+					minutes: readingMinutes(stripTags(entry!.content ?? '')),
+					html
+				}
+			: null
+	};
 };
 
 const notFound = () => fail(404, { message: 'That link doesn’t exist any more.' });
