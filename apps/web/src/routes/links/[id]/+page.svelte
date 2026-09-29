@@ -23,25 +23,30 @@
 
 	let editing = $state(false);
 	let busy = $state(false);
-	let laterButton = $state<HTMLButtonElement>();
 	let finishButton = $state<HTMLButtonElement>();
 	let starForm = $state<HTMLFormElement>();
 
-	/** Finished / Later: offer Undo, then move on to the next item in the queue. */
+	const nextHref = $derived(
+		!data.next
+			? resolve('/')
+			: data.next.kind === 'post'
+				? resolve('/entries/[id]', { id: data.next.id })
+				: resolve('/links/[id]', { id: data.next.id })
+	);
+
+	/** Done: offer Undo, then move on to the top of the inbox. */
 	const triage: SubmitFunction = () => {
 		busy = true;
 		const title = displayTitle(link);
+		const next = nextHref;
 		return async ({ result, update }) => {
 			busy = false;
 			if (result.type !== 'success' || !result.data?.undo) return update();
 			toast.show({
-				message: `${result.data.done === 'finished' ? 'Finished' : 'Later'} · ${title}`,
+				message: `Done · ${title}`,
 				undo: undoQueueChange(resolve('/links/[id]', { id: link.id }), result.data.undo)
 			});
-			const nextId = result.data.nextId as string | null;
-			await goto(nextId ? resolve('/links/[id]', { id: nextId }) : resolve('/'), {
-				invalidateAll: true
-			});
+			await goto(next, { invalidateAll: true });
 		};
 	};
 
@@ -64,10 +69,8 @@
 		if (ignoreShortcut(event)) return;
 		const key = event.key.toLowerCase();
 		if (key === 'e' && !archived) finishButton?.form?.requestSubmit(finishButton);
-		else if (key === 'l' && !archived) laterButton?.form?.requestSubmit(laterButton);
 		else if (key === 's') starForm?.requestSubmit();
-		else if (key === 'j' && data.nextId) goto(resolve('/links/[id]', { id: data.nextId }));
-		else if (key === 'k' && data.prevId) goto(resolve('/links/[id]', { id: data.prevId }));
+		else if (key === 'j' && data.next) goto(nextHref);
 		else if (key === 'o') window.open(link.url, '_blank', 'noopener,noreferrer');
 		else return;
 		event.preventDefault();
@@ -103,18 +106,18 @@
 				stroke-linejoin="round"
 				aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg
 			>
-			{archived ? 'Archive' : 'Queue'}
+			{archived ? 'Archive' : 'Inbox'}
 		</a>
 		<p class="hidden font-ui text-[0.8125rem] text-ink-3 lg:block">
-			<kbd>E</kbd> finished · <kbd>L</kbd> later · <kbd>S</kbd> star · <kbd>J</kbd>/<kbd>K</kbd> next/prev
+			<kbd>E</kbd> done · <kbd>S</kbd> star · <kbd>J</kbd> next · <kbd>O</kbd> open
 		</p>
 	</div>
 
 	{#if data.notice}
 		<p role="status" class="rounded-md bg-sunk px-4 py-3 font-ui text-[0.9375rem] text-ink">
 			{data.notice === 'saved'
-				? 'Saved to your queue.'
-				: 'You’d already saved this. It’s updated and back in your queue.'}
+				? 'Saved. It’s in your inbox under Shared.'
+				: 'You’d already saved this. It’s updated and back in your inbox.'}
 		</p>
 	{/if}
 
@@ -122,14 +125,14 @@
 		<form
 			method="POST"
 			action={action('restore')}
-			use:enhance={withToast(() => 'Back in your queue')}
+			use:enhance={withToast(() => 'Back in your inbox')}
 			class="flex items-center justify-between gap-3 rounded-md bg-sunk px-4 py-2"
 		>
 			<span class="font-ui text-[0.9375rem] text-ink">
-				Finished {link.readAt ? relativeDay(link.readAt) : ''}
+				Done {link.readAt ? relativeDay(link.readAt) : ''}
 			</span>
 			<button class="h-11 rounded-md px-2 font-ui text-sm font-bold text-accent hover:underline"
-				>Back to queue</button
+				>Back to inbox</button
 			>
 		</form>
 	{/if}
@@ -287,18 +290,27 @@
 			aria-labelledby="next-heading"
 		>
 			<h2 id="next-heading" class="kicker text-ink-2">
-				Up next{#if !archived}<span class="text-ink-3">
-						· Finished or Later takes you here</span
-					>{/if}
+				Up next{#if !archived}<span class="text-ink-3"> · Done takes you here</span>{/if}
 			</h2>
-			<a href={resolve('/links/[id]', { id: data.next.id })} class="group flex gap-3.5">
+			<a href={nextHref} class="group flex gap-3.5">
 				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-					<span class="kicker text-[0.6875rem] text-accent">{siteLabel(data.next)}</span>
+					<span class="kicker text-[0.6875rem] text-accent"
+						>{data.next.kind === 'shared' ? 'Shared · ' : ''}{data.next.source}</span
+					>
 					<span class="headline text-[1.375rem] leading-[1.15] group-hover:text-accent-strong"
-						>{displayTitle(data.next)}</span
+						>{data.next.title}</span
 					>
 				</div>
-				<LinkImage link={data.next} class="h-21 w-21 shrink-0 rounded" />
+				{#if data.next.imageUrl}
+					<LinkImage
+						link={{
+							url: data.next.url ?? 'https://example.com',
+							imageUrl: data.next.imageUrl,
+							title: data.next.title
+						}}
+						class="h-21 w-21 shrink-0 rounded"
+					/>
+				{/if}
 			</a>
 		</section>
 	{/if}
@@ -327,17 +339,6 @@
 	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
 >
 	<div class="mx-auto flex max-w-xl gap-2 px-3.5 py-2.5">
-		{#if !archived}
-			<form method="POST" use:enhance={triage} class="flex flex-1">
-				<button
-					bind:this={laterButton}
-					formaction={action('later')}
-					disabled={busy}
-					class="{barButton} flex-1 border-rule-strong bg-paper text-accent hover:border-accent"
-					>Later</button
-				>
-			</form>
-		{/if}
 		<form
 			bind:this={starForm}
 			method="POST"
@@ -385,21 +386,21 @@
 			<form
 				method="POST"
 				action={action('restore')}
-				use:enhance={withToast(() => 'Back in your queue')}
+				use:enhance={withToast(() => 'Back in your inbox')}
 				class="flex flex-[2.3]"
 			>
 				<button class="{barButton} flex-1 border-ink bg-ink text-paper hover:bg-accent-strong"
-					>Back to queue</button
+					>Back to inbox</button
 				>
 			</form>
 		{:else}
-			<form method="POST" use:enhance={triage} class="flex flex-[1.3]">
+			<form method="POST" use:enhance={triage} class="flex flex-1">
 				<button
 					bind:this={finishButton}
 					formaction={action('finish')}
 					disabled={busy}
 					class="{barButton} flex-1 border-ink bg-ink text-paper hover:bg-accent-strong"
-					>Finished</button
+					>Done</button
 				>
 			</form>
 		{/if}

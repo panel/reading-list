@@ -16,7 +16,7 @@
 <div class="mx-auto max-w-xl px-5.5 pt-6 lg:pt-12">
 	<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">Save a link</h1>
 	<p class="mt-2 text-[1.0625rem] text-ink-2">
-		It goes to the back of your queue with its title, summary and image.
+		It shows up in your inbox under Shared, with its title, summary and image.
 	</p>
 
 	<form
@@ -84,7 +84,7 @@
 			disabled={saving}
 			class="h-13 rounded-md bg-ink font-ui text-base font-bold text-paper hover:bg-accent-strong disabled:opacity-70"
 		>
-			{saving ? 'Saving… fetching the page' : 'Save to queue'}
+			{saving ? 'Saving… fetching the page' : 'Save'}
 		</button>
 	</form>
 </div>

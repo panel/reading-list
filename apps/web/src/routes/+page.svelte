@@ -1,257 +1,377 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { flyOff, swipe } from '$lib/actions/swipe';
+	import { swipe } from '$lib/actions/swipe';
+	import { resolve } from '$app/paths';
 	import LinkImage from '$lib/components/LinkImage.svelte';
-	import { displayTitle, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
-	import { ignoreShortcut } from '$lib/keys';
+	import { relativeDay } from '$lib/format';
 	import { toast, undoQueueChange } from '$lib/toast.svelte';
+	import type { InboxItem } from '$lib/server/inbox';
 
 	let { data } = $props();
-	const lead = $derived(data.queue.items[0]);
-	const upNext = $derived(data.queue.items.slice(1));
+	let refreshing = $state(false);
 
-	let card = $state<HTMLElement>();
-	let laterButton = $state<HTMLButtonElement>();
-	let finishButton = $state<HTMLButtonElement>();
-	let starForm = $state<HTMLFormElement>();
-	let dragX = $state(0);
-	let busy = $state(false);
+	const SHARED = 'shared';
+	const showingShared = $derived(data.feedId === SHARED);
 
-	const hint = (value: number) => Math.max(0, Math.min(1, value / 90)).toFixed(2);
+	const hrefFor = (item: InboxItem) =>
+		item.kind === 'post'
+			? resolve('/entries/[id]', { id: item.id })
+			: resolve('/links/[id]', { id: item.id });
+	const keyFor = (item: InboxItem) => `${item.kind}:${item.id}`;
 
-	/** Finished (1) or Later (-1) on the lead card, from a swipe, button or key. */
-	function act(direction: 1 | -1, animate = true) {
-		if (busy || !lead) return;
-		if (animate) flyOff(card, direction);
-		const button = direction === 1 ? finishButton : laterButton;
-		button?.form?.requestSubmit(button);
+	// Per-row swipe state: the card element, its action form, and the drag offset.
+	const rows: Record<string, HTMLElement> = $state({});
+	const forms: Record<string, HTMLFormElement> = $state({});
+	let drag = $state<{ key: string; dx: number } | null>(null);
+	const hint = (value: number) => Math.max(0, Math.min(1, value / 80)).toFixed(2);
+
+	/** Swipe left is Done; swipe right stars (and springs back if it's starred already). */
+	function swiped(item: InboxItem, direction: 1 | -1) {
+		const key = keyFor(item);
+		const form = forms[key];
+		const button = form?.querySelector<HTMLButtonElement>(
+			`button[value="${direction === 1 ? 'star' : 'done'}"]`
+		);
+		if (button && !button.disabled && !(direction === 1 && item.starred)) {
+			form.requestSubmit(button);
+		} else {
+			drag = null;
+			if (rows[key]) rows[key].style.transform = '';
+		}
 	}
 
-	const triage: SubmitFunction = ({ submitter }) => {
-		busy = true;
-		const title = lead ? displayTitle(lead) : '';
-		const done = submitter?.getAttribute('value');
-		// Buttons pressed directly animate here; swipes have already flown off.
-		if (card && !card.style.transform) flyOff(card, done === 'finished' ? 1 : -1);
-		return async ({ result, update }) => {
-			if (result.type === 'success' && result.data?.undo) {
-				toast.show({
-					message: `${result.data.done === 'finished' ? 'Finished' : 'Later'} · ${title}`,
-					undo: undoQueueChange(
-						resolve('/links/[id]', { id: result.data.id as string }),
-						result.data.undo
-					)
-				});
-			}
-			await update();
-			busy = false;
-			dragX = 0;
+	const rowAction =
+		(item: InboxItem): SubmitFunction =>
+		({ submitter }) => {
+			const kind = submitter?.getAttribute('value');
+			const key = keyFor(item);
+			return async ({ result, update }) => {
+				await update();
+				drag = null;
+				if (rows[key]) rows[key].style.transform = '';
+				if (result.type === 'failure') {
+					toast.show({ message: String(result.data?.message ?? 'Something went wrong') });
+				} else if (result.type === 'success') {
+					if (kind === 'done') {
+						toast.show({
+							message: `Done · ${item.title}`,
+							undo:
+								item.kind === 'post'
+									? {
+											action: `${resolve('/entries/[id]', { id: item.id })}?/dismiss`,
+											fields: { dismissed: 'false' }
+										}
+									: result.data?.undo
+										? undoQueueChange(
+												resolve('/links/[id]', { id: item.id }),
+												result.data.undo as Parameters<typeof undoQueueChange>[1]
+											)
+										: undefined
+						});
+					} else if (kind === 'star') {
+						toast.show({
+							message: result.data?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
+						});
+					}
+				}
+			};
 		};
-	};
 
-	const star: SubmitFunction = () => {
-		return async ({ result, update }) => {
-			if (result.type === 'success') {
-				toast.show({
-					message: result.data?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
-				});
-			}
-			await update();
-		};
-	};
+	const current = $derived(data.feeds.find((f) => f.id === data.feedId));
+	const folders = $derived(
+		[...new Set(data.feeds.map((f) => f.folder).filter((f): f is string => Boolean(f)))]
+			.sort((a, b) => a.localeCompare(b))
+			.map((name) => ({
+				name,
+				unread: data.feeds.filter((f) => f.folder === name).reduce((n, f) => n + f.unread, 0)
+			}))
+	);
+	// The filter the page is showing: Shared, one feed, one folder, or everything.
+	const scopeTitle = $derived(showingShared ? 'Shared' : (current?.title ?? data.folder ?? null));
+	const failing = $derived(data.feeds.filter((f) => f.failing));
+	const unreadPosts = $derived(data.inbox.items.filter((i) => i.kind === 'post' && !i.read).length);
+	const empty = $derived(data.feeds.length === 0 && data.inbox.shared === 0);
+	const summary = $derived(
+		[
+			`${data.inbox.unread} unread`,
+			!scopeTitle && data.inbox.shared && `${data.inbox.shared} shared`,
+			!scopeTitle &&
+				data.feeds.length &&
+				`${data.feeds.length} ${data.feeds.length === 1 ? 'feed' : 'feeds'}`
+		]
+			.filter(Boolean)
+			.join(' · ')
+	);
 
-	function onkeydown(event: KeyboardEvent) {
-		if (!lead || ignoreShortcut(event)) return;
-		const key = event.key.toLowerCase();
-		if (key === 'e') act(1);
-		else if (key === 'l') act(-1);
-		else if (key === 's') starForm?.requestSubmit();
-		else if (key === 'o' || key === 'enter') goto(resolve('/links/[id]', { id: lead.id }));
-		else return;
-		event.preventDefault();
-	}
-
-	const actionButton =
-		'h-13 flex-1 rounded-md border font-ui text-[0.9375rem] font-bold disabled:opacity-60 lg:h-10 lg:flex-none lg:px-4 lg:text-sm';
+	const chip = (active: boolean, tone: 'ink' | 'accent' = 'ink') =>
+		`flex h-9 items-center gap-1.5 rounded-full border px-3.5 font-ui text-[0.8125rem] font-bold whitespace-nowrap ${
+			active
+				? tone === 'ink'
+					? 'border-ink bg-ink text-paper'
+					: 'border-accent bg-accent text-paper'
+				: tone === 'ink'
+					? 'border-rule-strong text-ink-2 hover:border-ink'
+					: 'border-accent/40 text-accent hover:border-accent'
+		}`;
 </script>
 
 <svelte:head>
-	<title>Queue · Reading List</title>
+	<title>{scopeTitle ?? 'Inbox'} · Reading List</title>
 </svelte:head>
 
-<svelte:window {onkeydown} />
-
-<div class="mx-auto max-w-[1280px] px-3.5 lg:px-16">
-	<div class="flex items-baseline justify-between px-1.5 pt-4 pb-3 lg:px-0 lg:pt-9">
-		<h1 class="kicker text-ink-2">Queue · {data.queue.total}</h1>
-		{#if lead}
-			<p class="hidden font-ui text-[0.8125rem] text-ink-3 lg:block">
-				<kbd>E</kbd> finished · <kbd>L</kbd> later · <kbd>S</kbd> star · <kbd>O</kbd> open
+<div class="mx-auto max-w-3xl px-5 pt-5 lg:pt-10">
+	<header class="flex flex-wrap items-end justify-between gap-3 border-b-2 border-ink pb-4">
+		<div>
+			<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">{scopeTitle ?? 'Inbox'}</h1>
+			<p class="mt-1.5 font-ui text-[0.9375rem] text-ink-2">
+				{summary}
 			</p>
-		{/if}
-	</div>
-
-	{#if !lead}
-		<div class="mx-auto max-w-md px-3 py-16 text-center">
-			<p class="headline text-3xl">Nothing in your queue</p>
-			<p class="mt-3 text-[1.0625rem] leading-relaxed text-ink-2">
-				Save a link and it shows up here, ready to read.
-			</p>
-			<a
-				href={resolve('/save')}
-				class="mt-6 inline-flex h-12 items-center rounded-md bg-ink px-6 font-ui font-bold text-paper hover:bg-accent-strong"
-				>Save a link</a
-			>
 		</div>
-	{:else}
-		<div class="grid gap-8 lg:grid-cols-12">
-			<div class="min-w-0 lg:col-span-8 lg:border-r lg:border-rule lg:pr-8">
-				<!-- The stage: swipe hints and the next card sit behind the lead card. -->
-				<div class="relative">
-					<div
-						aria-hidden="true"
-						class="pointer-events-none absolute inset-0 flex items-center justify-between px-5 kicker text-sm lg:hidden"
+		<div class="flex gap-2">
+			{#if data.feeds.length && !showingShared}
+				<form
+					method="POST"
+					action="?/refresh"
+					use:enhance={() => {
+						refreshing = true;
+						return async ({ result, update }) => {
+							await update();
+							refreshing = false;
+							if (result.type === 'success') {
+								const { newEntries, errors } = result.data as {
+									newEntries: number;
+									errors: number;
+								};
+								toast.show({
+									message:
+										(newEntries
+											? `${newEntries} new ${newEntries === 1 ? 'post' : 'posts'}`
+											: 'No new posts') +
+										(errors ? ` · ${errors} ${errors === 1 ? 'feed' : 'feeds'} failed` : '')
+								});
+							}
+						};
+					}}
+				>
+					<button
+						disabled={refreshing}
+						class="h-11 rounded-md border border-rule-strong px-4 font-ui text-sm font-bold text-ink hover:border-ink disabled:opacity-60"
+						>{refreshing ? 'Refreshing…' : 'Refresh'}</button
 					>
-						<span class="text-accent" style:opacity={hint(-dragX)}>← Later</span>
-						<span class="text-ink" style:opacity={hint(dragX)}>Finished →</span>
-					</div>
-					{#if upNext[0]}
-						<div
-							aria-hidden="true"
-							class="absolute inset-x-2.5 top-3 bottom-0 rounded-md border border-rule bg-surface opacity-70 lg:hidden"
-						></div>
-					{/if}
-
-					{#key lead.id}
-						<article
-							bind:this={card}
-							use:swipe={{
-								onswipe: (d) => act(d, false),
-								ondrag: (x) => (dragX = x),
-								disabled: busy
-							}}
-							class="relative overflow-hidden rounded-md border border-rule bg-surface shadow-[0_1px_2px_rgb(21_32_32/0.06),0_8px_24px_rgb(21_32_32/0.06)] select-none lg:rounded-none lg:border-0 lg:bg-paper lg:shadow-none lg:select-auto"
-						>
-							<a href={resolve('/links/[id]', { id: lead.id })} class="block" draggable="false">
-								<LinkImage link={lead} class="h-64 lg:h-96 lg:rounded" />
-							</a>
-							<div class="flex flex-col gap-2.5 px-5.5 pt-4.5 pb-5 lg:px-0">
-								<div class="kicker text-accent">
-									{siteLabel(lead)}{#if lead.isReference}<span class="text-ink-3">
-											· ★ Reference</span
-										>{/if}
-								</div>
-								<h2
-									class="headline text-[1.95rem] leading-[1.08] lg:text-[3.25rem] lg:leading-[1.02]"
-								>
-									<a
-										href={resolve('/links/[id]', { id: lead.id })}
-										class="hover:text-accent-strong"
-										draggable="false">{displayTitle(lead)}</a
-									>
-								</h2>
-								<p class="text-[0.9375rem] text-ink-2 italic">
-									{[lead.author && `by ${lead.author}`, `saved ${relativeDay(lead.savedAt)}`]
-										.filter(Boolean)
-										.join(' · ')}
-								</p>
-								{#if lead.note}
-									<p
-										class:dropcap={wantsDropCap(lead.note)}
-										class="mt-1 text-[1.0625rem] leading-[1.55] whitespace-pre-line lg:max-w-[36rem] lg:text-lg"
-									>
-										{lead.note}
-									</p>
-								{:else if lead.description}
-									<p
-										class="mt-1 text-[1.0625rem] leading-[1.55] text-ink-2 lg:max-w-[36rem] lg:text-lg"
-									>
-										{lead.description}
-									</p>
-								{/if}
-								{#if lead.tags.length}
-									<p class="font-ui text-[0.8125rem] text-ink-2">
-										{lead.tags.map((t) => `#${t}`).join('  ')}
-									</p>
-								{/if}
-							</div>
-						</article>
-					{/key}
-				</div>
-
-				<div class="mt-3 flex flex-col gap-2 lg:mt-0 lg:flex-row-reverse lg:justify-end">
-					<p class="text-center font-ui text-xs text-ink-3 lg:hidden">
-						Swipe right when finished · left to save it for later
-					</p>
-					<form method="POST" use:enhance={triage} class="flex gap-2">
-						<button
-							bind:this={laterButton}
-							formaction="{resolve('/links/[id]', { id: lead.id })}?/later"
-							value="later"
-							disabled={busy}
-							class="{actionButton} border-rule-strong bg-paper text-accent hover:border-accent"
-							>Later</button
-						>
-						<a
-							href={lead.url}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="{actionButton} flex flex-[1.4] items-center justify-center border-ink bg-ink text-paper hover:bg-accent-strong lg:order-first"
-							>Read now</a
-						>
-						<button
-							bind:this={finishButton}
-							formaction="{resolve('/links/[id]', { id: lead.id })}?/finish"
-							value="finished"
-							disabled={busy}
-							class="{actionButton} border-rule-strong bg-paper text-ink hover:border-ink"
-							>Finished</button
-						>
-					</form>
-					<form
-						bind:this={starForm}
-						method="POST"
-						action="{resolve('/links/[id]', { id: lead.id })}?/star"
-						use:enhance={star}
-						class="hidden lg:block"
-					>
-						<input type="hidden" name="starred" value={String(!lead.isReference)} />
-						<button
-							class="{actionButton} border-rule-strong bg-paper text-ink hover:border-ink"
-							aria-pressed={lead.isReference}>{lead.isReference ? '★ Starred' : '☆ Star'}</button
-						>
-					</form>
-				</div>
-			</div>
-
-			{#if upNext.length}
-				<aside class="min-w-0 px-1.5 lg:col-span-4 lg:px-0">
-					<h2 class="border-b-2 border-ink pb-3 kicker text-ink-2">Up next</h2>
-					<ul>
-						{#each upNext as item (item.id)}
-							<li class="border-b border-rule">
-								<a href={resolve('/links/[id]', { id: item.id })} class="group flex gap-3.5 py-4">
-									<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-										<span class="kicker text-[0.6875rem] text-accent">{siteLabel(item)}</span>
-										<span
-											class="headline text-[1.3125rem] leading-[1.15] group-hover:text-accent-strong"
-											>{displayTitle(item)}</span
-										>
-										{#if item.note}
-											<span class="line-clamp-2 text-sm leading-[1.45] text-ink-2">{item.note}</span
-											>
-										{/if}
-									</div>
-									<LinkImage link={item} class="h-21 w-21 shrink-0 rounded" />
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</aside>
+				</form>
+			{/if}
+			{#if showingShared}
+				<a
+					href={resolve('/save')}
+					class="flex h-11 items-center rounded-md bg-ink px-4 font-ui text-sm font-bold text-paper hover:bg-accent-strong"
+					>Save a link</a
+				>
+			{:else}
+				<a
+					href={resolve('/feeds/manage')}
+					class="flex h-11 items-center rounded-md bg-ink px-4 font-ui text-sm font-bold text-paper hover:bg-accent-strong"
+					>{data.feeds.length ? 'Manage feeds' : 'Add a feed'}</a
+				>
 			{/if}
 		</div>
+	</header>
+
+	{#if failing.length}
+		<p role="status" class="mt-4 rounded-md bg-sunk px-4 py-3 font-ui text-[0.9375rem] text-ink">
+			{failing.length === 1
+				? `${failing[0].title} keeps failing to update.`
+				: `${failing.length} feeds keep failing to update.`}
+			<a href={resolve('/feeds/manage')} class="font-bold text-accent hover:underline">See why</a>
+		</p>
+	{/if}
+
+	{#if !empty}
+		<nav aria-label="Filter the inbox" class="-mx-5 overflow-x-auto px-5">
+			<ul class="flex gap-2 py-3">
+				<li>
+					<a
+						href={resolve('/')}
+						aria-current={!data.feedId && !data.folder ? 'page' : undefined}
+						class={chip(!data.feedId && !data.folder)}>All</a
+					>
+				</li>
+				<li>
+					<a
+						href="{resolve('/')}?feed={SHARED}"
+						aria-current={showingShared ? 'page' : undefined}
+						class={chip(showingShared)}
+						>Shared{#if data.inbox.shared}<span class="font-normal opacity-75"
+								>{data.inbox.shared}</span
+							>{/if}</a
+					>
+				</li>
+				{#each folders as f (f.name)}
+					<li>
+						<a
+							href="{resolve('/')}?folder={encodeURIComponent(f.name)}"
+							aria-current={data.folder === f.name ? 'page' : undefined}
+							class={chip(data.folder === f.name, 'accent')}
+							>{f.name}{#if f.unread}<span class="font-normal opacity-75">{f.unread}</span>{/if}</a
+						>
+					</li>
+				{/each}
+				{#each data.feeds.filter((f) => !data.folder || f.folder === data.folder) as feed (feed.id)}
+					<li>
+						<a
+							href="{resolve('/')}?feed={encodeURIComponent(feed.id)}"
+							aria-current={data.feedId === feed.id ? 'page' : undefined}
+							class={chip(data.feedId === feed.id)}
+							>{feed.title}{#if feed.unread}<span class="font-normal opacity-75">{feed.unread}</span
+								>{/if}</a
+						>
+					</li>
+				{/each}
+			</ul>
+		</nav>
+	{/if}
+
+	{#if empty}
+		<div class="mx-auto max-w-md py-14 text-center">
+			<p class="headline text-3xl">Everything you read, in one place</p>
+			<p class="mt-3 text-[1.0625rem] leading-relaxed text-ink-2">
+				Links you share in and new posts from the blogs you follow show up here.
+			</p>
+			<div class="mt-6 flex justify-center gap-2">
+				<a
+					href={resolve('/save')}
+					class="inline-flex h-12 items-center rounded-md bg-ink px-6 font-ui font-bold text-paper hover:bg-accent-strong"
+					>Save a link</a
+				>
+				<a
+					href={resolve('/feeds/manage')}
+					class="inline-flex h-12 items-center rounded-md border border-rule-strong px-6 font-ui font-bold text-ink hover:border-ink"
+					>Add a feed</a
+				>
+			</div>
+		</div>
+	{:else if data.inbox.items.length === 0}
+		<p class="py-12 text-center text-[1.0625rem] text-ink-2 italic">
+			{showingShared
+				? 'Nothing shared right now. Links you send in from your phone land here.'
+				: 'Nothing new. Try Refresh.'}
+		</p>
+	{:else}
+		<ul>
+			{#each data.inbox.items as item (keyFor(item))}
+				{@const key = keyFor(item)}
+				{@const base = hrefFor(item)}
+				<li class="group/row relative overflow-hidden border-b border-rule">
+					<div
+						aria-hidden="true"
+						class="pointer-events-none absolute inset-0 flex items-center justify-between px-1 kicker text-sm lg:hidden"
+					>
+						<span class="text-ink-3" style:opacity={hint(drag?.key === key ? -drag.dx : 0)}
+							>← Done</span
+						>
+						<span class="text-accent" style:opacity={hint(drag?.key === key ? drag.dx : 0)}
+							>{item.starred ? '★ Starred' : '☆ Star'} →</span
+						>
+					</div>
+					<div
+						bind:this={rows[key]}
+						use:swipe={{
+							onswipe: (d) => swiped(item, d),
+							ondrag: (dx) => (drag = { key, dx }),
+							threshold: 90
+						}}
+						class="relative bg-paper"
+					>
+						<a href={base} class="group flex gap-3.5 py-4" draggable="false">
+							<div class="flex min-w-0 flex-1 flex-col gap-1.5" class:opacity-60={item.read}>
+								<span class="flex items-center gap-1.5 kicker text-[0.6875rem] text-accent">
+									{#if !item.read}<span
+											class="inline-block h-1.5 w-1.5 rounded-full bg-accent"
+											aria-label="Unread"
+										></span>{/if}
+									{#if item.kind === 'shared'}<span class="text-ink-2">Shared ·</span>{/if}
+									{item.source} · {relativeDay(item.date)}
+									{#if item.starred}<span class="text-ink-2">· ★</span>{/if}
+								</span>
+								<span
+									class="headline text-[1.3125rem] leading-[1.15] group-hover:text-accent-strong"
+									>{item.title}</span
+								>
+								{#if item.summary}
+									<span
+										class="line-clamp-2 text-[0.9375rem] leading-[1.45] {item.note
+											? 'text-ink'
+											: 'text-ink-2'}">{item.summary}</span
+									>
+								{/if}
+							</div>
+							{#if item.imageUrl}
+								<LinkImage
+									link={{
+										url: item.url ?? 'https://example.com',
+										imageUrl: item.imageUrl,
+										title: item.title
+									}}
+									class="h-21 w-21 shrink-0 rounded"
+								/>
+							{/if}
+						</a>
+					</div>
+					<!-- Screen-reader and keyboard access on mobile; hover buttons on desktop. -->
+					<form
+						bind:this={forms[key]}
+						method="POST"
+						use:enhance={rowAction(item)}
+						class="sr-only flex gap-1.5 max-lg:focus-within:not-sr-only lg:not-sr-only lg:absolute lg:top-3 lg:bg-paper {item.imageUrl
+							? 'lg:right-[6.25rem]'
+							: 'lg:right-0'} lg:opacity-0 lg:group-hover/row:opacity-100 lg:focus-within:opacity-100"
+					>
+						<input type="hidden" name="starred" value={String(!item.starred)} />
+						<input type="hidden" name="dismissed" value="true" />
+						<button
+							value="star"
+							formaction="{base}?/star"
+							disabled={!item.url}
+							aria-label={item.starred ? 'Unstar' : 'Star as reference'}
+							aria-pressed={item.starred}
+							class="h-9 w-9 rounded-md border border-rule-strong font-ui text-sm hover:border-ink disabled:opacity-40 {item.starred
+								? 'text-accent'
+								: 'text-ink'}">{item.starred ? '★' : '☆'}</button
+						>
+						<button
+							value="done"
+							formaction="{base}?/{item.kind === 'post' ? 'dismiss' : 'finish'}"
+							class="h-9 rounded-md border border-rule-strong px-3 font-ui text-[0.8125rem] font-bold text-ink-2 hover:border-ink hover:text-ink"
+							>Done</button
+						>
+					</form>
+				</li>
+			{/each}
+		</ul>
+		{#if unreadPosts && !showingShared}
+			<form
+				method="POST"
+				action="?/markAllRead"
+				use:enhance={({ cancel }) => {
+					const scope = scopeTitle ?? 'all your feeds';
+					if (!confirm(`Mark every post in ${scope} as read? Shared links stay.`)) return cancel();
+					return async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') {
+							const n = Number(result.data?.markedRead ?? 0);
+							toast.show({ message: `Marked ${n} ${n === 1 ? 'post' : 'posts'} read` });
+						}
+					};
+				}}
+				class="flex justify-center py-6"
+			>
+				<input type="hidden" name="feedId" value={data.feedId ?? ''} />
+				<input type="hidden" name="folder" value={data.folder ?? ''} />
+				<button
+					class="h-11 rounded-md border border-rule-strong px-4 font-ui text-sm font-bold text-ink-2 hover:border-ink hover:text-ink"
+					>Mark all posts {scopeTitle ? `in ${scopeTitle}` : ''} read</button
+				>
+			</form>
+		{/if}
 	{/if}
 </div>

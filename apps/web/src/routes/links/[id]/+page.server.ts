@@ -4,14 +4,13 @@ import {
 	deleteLink,
 	finishLink,
 	getLink,
-	laterLink,
 	parseQueueState,
-	queueNeighbors,
 	requeueLink,
 	setNote,
 	setTags,
 	starLink
 } from '$lib/server/links';
+import { nextInboxItem } from '$lib/server/inbox';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -22,38 +21,23 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const { prevId, nextId } = await queueNeighbors(locals.db, locals.user.id, link);
-	const next = nextId ? await getLink(locals.db, locals.user.id, nextId) : null;
-	return { link, notice, prevId, nextId, next };
+	return { link, notice, next: await nextInboxItem(locals.db, locals.user.id, link.id) };
 };
 
 const notFound = () => fail(404, { message: 'That link doesn’t exist any more.' });
 
 /**
- * Finished / Later return the link's previous state so the client can offer
- * Undo, and the next queue item so it can move on. They don't redirect: the
- * queue page posts here too and stays where it is.
+ * Done returns the link's previous state so the client can offer Undo, and
+ * doesn't redirect: the inbox posts here too and stays where it is.
  */
 export const actions: Actions = {
 	finish: async ({ locals, params }) => {
 		const undo = await finishLink(locals.db, locals.user.id, params.id);
 		if (!undo) return notFound();
-		const link = (await getLink(locals.db, locals.user.id, params.id))!;
-		const { nextId } = await queueNeighbors(locals.db, locals.user.id, link);
-		return { done: 'finished' as const, id: params.id, undo, nextId };
+		return { done: 'finished' as const, id: params.id, undo };
 	},
 
-	later: async ({ locals, params }) => {
-		const link = await getLink(locals.db, locals.user.id, params.id);
-		if (!link) return notFound();
-		// Next is computed before the move, or it would be this link's new neighbor.
-		const { nextId } = await queueNeighbors(locals.db, locals.user.id, link);
-		const undo = await laterLink(locals.db, locals.user.id, params.id);
-		if (!undo) return notFound();
-		return { done: 'later' as const, id: params.id, undo, nextId };
-	},
-
-	/** Back to the queue: to an exact earlier state when undoing, else to the back. */
+	/** Back into the inbox: to an exact earlier state when undoing, else as newly shared. */
 	restore: async ({ locals, params, request }) => {
 		const form = await request.formData();
 		const state = form.has('status')

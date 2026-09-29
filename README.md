@@ -1,6 +1,6 @@
 # Reading List
 
-A personal RSS reader, read-later queue, and reference library, running on
+A personal inbox for RSS feeds and links you share in, plus a reference library, running on
 Cloudflare Workers + D1 (free tier).
 
 - [PLAN.md](PLAN.md): what we're building and in what order

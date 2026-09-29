@@ -57,18 +57,18 @@ Adding OAuth would be its own piece of work.
 | Tool | Scope | Does |
 | --- | --- | --- |
 | `search_links` | `links:read` | Search with the app's syntax: words, `"phrases"`, `-word`, `tag:`, `site:`, `is:ref\|queued\|archived` |
-| `list_queue` | `links:read` | The queue, oldest first |
+| `list_queue` | `links:read` | Shared links still to read (the inbox's Shared feed), newest first |
 | `get_link` | `links:read` | One link with note and tags |
 | `save_link` | `links:write` | Save a URL with a note and tags. Saving one that already exists merges the note and tags |
 | `update_link` | `links:write` | Replace or append to the note, replace tags, set `status` (`queued`/`archived`), star or unstar |
 | `list_feeds` | `feeds:read` | Followed feeds with unread counts |
 | `list_unread_entries` | `feeds:read` | Posts, newest first, optionally for one feed |
 | `read_entry` | `feeds:read` | A post's text (up to 30,000 characters) |
-| `triage_entry` | `feeds:write` | `later` (save to the queue), `star`, `dismiss`, `read`, `unread` |
+| `triage_entry` | `feeds:write` | `later` (add the post to Shared), `star`, `dismiss`, `read`, `unread` |
 
 Post text comes from third-party sites. The server tells the agent to treat
 it as content, not instructions, but only give the `Agent` choice to agents
-you'd trust with your queue. Undo is there if one misbehaves.
+you'd trust with your inbox. Undo is there if one misbehaves.
 
 ## REST
 
@@ -77,7 +77,7 @@ errors, `message`.
 
 | Request | Scope | Body / query |
 | --- | --- | --- |
-| `GET /api/links?q=…&limit=…` | `links:read` | Search. An empty `q` returns the queue |
+| `GET /api/links?q=…&limit=…` | `links:read` | Search. An empty `q` returns the shared links still to read |
 | `POST /api/links` | `links:write` | `{url, note?, tags?}`. `201` new, `200` already saved |
 | `GET /api/links/:id` | `links:read` | |
 | `PATCH /api/links/:id` | `links:write` | `{note?, appendNote?, tags?, status?: "queued"\|"archived", reference?: boolean}` |

@@ -84,18 +84,23 @@ Tailwind (v4) with the tokens above in `@theme`, plus a small hand-written
 
 ## Interactions
 
-**Vocabulary:** **Later** (keep it in the queue, move on) and **Finished**
-(done with it, archived). Star = reference. These words are used everywhere
-in the UI, including buttons, swipe hints and shortcuts.
+**Vocabulary:** **Done** (finished with it: a post is dismissed, a shared link
+is archived) and **☆ Star** (keep it as a reference). Leaving something unread
+means "later"; there is no separate queue. These words are used everywhere in
+the UI, including buttons, swipe hints and shortcuts.
 
-**Mobile queue:** one card at a time.
+**Inbox** (Slice 10): links you share in and posts from your feeds, in one list.
 
-- Swipe right → Finished, swipe left → Later. The card follows the finger with
-  a slight rotation. It commits past ~100px, otherwise it springs back. Hint
-  labels fade in as you drag.
-- Buttons do the same thing: Later / Read now / Finished (52px tall).
-- Undo toast after each swipe.
-- Bottom tab bar: Queue / Feeds / Library.
+- Chips: All / **Shared** (links you've sent in) / folders / each feed.
+- Unread first, then newest first. A shared link counts as unread until it's
+  Done, and is dated by when it was (last) shared.
+- Swipe a row left → **Done**, right → **☆ Star**, for posts and shared links
+  alike. The row follows the finger, commits past ~90px, otherwise springs back.
+  Hint labels fade in as you drag. Undo toast after Done. On desktop, ☆ / Done
+  buttons appear on hover.
+- "Mark all posts read" at the end of the list (all feeds, or the filtered
+  one). It never touches shared links.
+- Bottom tab bar: Inbox / Library / Save / Archive / Settings.
 
 **Reader (feed posts, full text in the app):**
 
@@ -105,23 +110,13 @@ in the UI, including buttons, swipe hints and shortcuts.
   quotes, then an end mark.
 - After the article: a "Read the original" button, a **Your notes** box
   (saved with the link, searchable), and **Up next**.
-- A sticky bottom bar: Later / Star / Copy link / Finished. Finished or Later
-  opens the next item.
+- A sticky bottom bar: ☆ / Copy link / Next →. Next opens the top of the
+  inbox, whether that's a post or a shared link.
 - **No swipe in the reader.** Chrome on iOS uses edge-swipe for back, and
   horizontal swipes happen by accident while scrolling or selecting text. You
   move to the next article by reaching the end and choosing.
 
-**Feeds inbox:** unread first, a filter chip per feed.
-
-- Swipe a row right → **Later** (saved to the back of the queue), left →
-  **Dismiss** (hidden from the inbox, with Undo). On desktop, Later / ☆ /
-  Dismiss buttons appear on hover.
-- ☆ **Star** keeps a post as a reference *without* queueing it (it's usually
-  just been read), so it lands in the archive with the ★.
-- "Mark all read" at the end of the list (all feeds, or the filtered one).
-- The reader's bar for a feed post is Later / ☆ / Copy link / Next →. Saving
-  opens an inline note-and-tags editor. Keys: `L` later, `S` star, `J`/`E` next,
-  `O` original.
+Keys in the post reader: `S` star, `J`/`E` next, `O` original.
 
 **Search, Library and the palette:**
 
@@ -137,22 +132,20 @@ in the UI, including buttons, swipe hints and shortcuts.
   og:description and author, captured at save time. Tapping it opens the
   original.
 - A prominent "Open on <site> ↗" button, then the note, the notes box, Up
-  next, and the same bottom bar.
+  next, and a bottom bar: ☆ / Copy link / **Done**. Done archives the link and
+  opens the top of the inbox. Keys: `E` done, `S` star, `J` next, `O` open.
 - We don't extract article text for saved links. If that's wanted later, it
   becomes its own slice.
 
-**Desktop:** a front-page layout. The lead story (big image, 52px headline)
-takes 8 of 12 columns and "Up next" takes 4. The top nav has Queue / Feeds /
-Library, search (⌘K) and Save a link. Keyboard shortcuts: `E` Finished, `L`
-Later, `S` star, `J`/`K` next/previous.
+**Desktop:** the inbox is a single centered column. The top nav has Inbox
+(with the unread count) / Library / Archive / Settings, search (⌘K) and Save a
+link.
 
 ## Implications for the data model
 
-- **Later** needs an ordering key so an item moves to the back of the queue:
-  add `queued_at` to `links` (set on save, bumped on Later) and sort the queue
-  by it.
-- **Finished** = `status = 'archived'` with `read_at` set (already in the
-  schema).
+- A **shared link** is `status = 'queued'`; `queued_at` (set when shared,
+  bumped when shared again) dates it in the inbox.
+- **Done** on a shared link = `status = 'archived'` with `read_at` set.
 - **Notes:** the single `note` column covers both the save-time note and
   notes added later, as one editable text. Split it into timestamped notes
   only if that turns out to be needed.

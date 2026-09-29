@@ -375,10 +375,10 @@ export async function updateLinkOp(
 	}
 	if (input.status === 'archived' && before.status !== 'archived') {
 		await finishLink(ctx.db, ctx.user.id, id);
-		changes.push('finished');
+		changes.push('done');
 	} else if (input.status === 'queued' && before.status !== 'queued') {
 		await requeueLink(ctx.db, ctx.user.id, id);
-		changes.push('back in queue');
+		changes.push('back in inbox');
 	}
 	if (typeof input.reference === 'boolean' && input.reference !== before.isReference) {
 		await starLink(ctx.db, ctx.user.id, id, input.reference);
@@ -477,7 +477,7 @@ export async function triageEntryOp(ctx: AgentContext, id: string, action: unkno
 			ctx,
 			`entry.${action}`,
 			id,
-			action === 'later' ? `Saved “${title}” to the queue` : `Starred “${title}”`,
+			action === 'later' ? `Added “${title}” to Shared` : `Starred “${title}”`,
 			{ type: 'all', steps: [undoLink, restoreState] }
 		);
 		const link = (await getLink(ctx.db, ctx.user.id, kept.link.id))!;

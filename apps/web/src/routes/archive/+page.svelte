@@ -17,13 +17,13 @@
 		<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">Archive</h1>
 		<p class="mt-2 font-ui text-[0.9375rem] text-ink-2">
 			{data.archive.total}
-			{data.archive.total === 1 ? 'link' : 'links'} you’ve finished, most recent first.
+			{data.archive.total === 1 ? 'link' : 'links'} you’re done with, most recent first.
 		</p>
 	</header>
 
 	{#if data.archive.items.length === 0}
 		<p class="py-12 text-center text-[1.0625rem] text-ink-2 italic">
-			Nothing finished yet. Swipe right on the queue when you’re done with something.
+			Nothing here yet. Swipe left on a shared link in your inbox when you’re done with it.
 		</p>
 	{:else}
 		<ul>
@@ -44,7 +44,7 @@
 						>
 						{#if item.readAt}
 							<span class="font-ui text-[0.8125rem] text-ink-3"
-								>Finished {relativeDay(item.readAt)}</span
+								>Done {relativeDay(item.readAt)}</span
 							>
 						{/if}
 					</a>
@@ -53,13 +53,13 @@
 						action="{resolve('/links/[id]', { id: item.id })}?/restore"
 						use:enhance={() =>
 							async ({ result, update }) => {
-								if (result.type === 'success') toast.show({ message: 'Back in your queue' });
+								if (result.type === 'success') toast.show({ message: 'Back in your inbox' });
 								await update();
 							}}
 					>
 						<button
 							class="h-11 shrink-0 rounded-md border border-rule-strong px-3 font-ui text-sm font-bold text-accent hover:border-accent"
-							>Requeue</button
+							>Back to inbox</button
 						>
 					</form>
 				</li>

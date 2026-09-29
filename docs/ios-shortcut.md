@@ -1,7 +1,7 @@
 # iOS Shortcut: Save to Reading List
 
 Saves the current page from Chrome (or Safari, or any app with a share sheet)
-to your queue, with an optional note and tags.
+to your inbox (under Shared), with an optional note and tags.
 
 Before you start:
 
@@ -67,7 +67,7 @@ end of the app row and choose **Edit Actions** to add it as a favorite.
 | Status | Meaning |
 | --- | --- |
 | `201` | Saved a new link |
-| `200` | Already saved: it was updated (note appended, tags merged, moved to the back of the queue) |
+| `200` | Already saved: it was updated (note appended, tags merged, back at the top of the inbox) |
 | `400` | Bad input: `message` says what's wrong |
 | `401` | Missing, invalid or revoked token |
 | `403` | Token doesn't have the `links:write` scope |

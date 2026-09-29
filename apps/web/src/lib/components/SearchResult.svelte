@@ -9,8 +9,8 @@
 	const status = $derived(
 		[
 			result.status === 'queued'
-				? 'In queue'
-				: `Finished ${result.readAt ? relativeDay(result.readAt) : ''}`,
+				? 'In inbox'
+				: `Done ${result.readAt ? relativeDay(result.readAt) : ''}`,
 			result.isReference ? '★ Reference' : null
 		]
 			.filter(Boolean)

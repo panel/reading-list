@@ -175,8 +175,9 @@ export async function linkForEntry(
 export class EntryHasNoUrlError extends Error {}
 
 /**
- * Keeps a feed post as a link. "queue" puts it at the back of the queue
- * (like saving it by hand); "star" makes it a reference without queueing it,
+ * Keeps a feed post as a link. "queue" adds it to the inbox's Shared feed
+ * (like sharing it by hand; the app no longer offers this, but the agent API
+ * does); "star" makes it a reference without putting it in the inbox,
  * since a starred post has usually just been read. Either marks the post read.
  */
 export async function keepEntry(

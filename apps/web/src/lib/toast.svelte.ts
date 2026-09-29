@@ -6,7 +6,7 @@ export interface Undo {
 	fields: Record<string, string>;
 }
 
-/** Undo for Finished / Later: restore the link's exact previous queue state. */
+/** Undo for Done on a shared link: restore its exact previous state. */
 export const undoQueueChange = (linkUrl: string, state: QueueState): Undo => ({
 	action: `${linkUrl}?/restore`,
 	fields: {

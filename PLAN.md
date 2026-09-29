@@ -7,8 +7,8 @@ running on Cloudflare's free tier.
 
 | Job | What happens | Main view |
 | --- | --- | --- |
-| **Follow** | New posts from authors I subscribe to show up automatically | Feed inbox |
-| **Save** | I send a link (with an optional note and tags) from anywhere to read later | Queue |
+| **Follow** | New posts from authors I subscribe to show up automatically | Inbox |
+| **Save** | I send a link (with an optional note and tags) from anywhere to read later | Inbox (the Shared feed) |
 | **Reference** | Articles I cite and share often live somewhere I can find them fast | Library + search |
 
 The core idea: **everything is a link**. A feed entry is a link I haven't
@@ -348,6 +348,31 @@ pipeline.
     restore the previous snapshot).
   - Checked end to end on the dev server: scope refusals (403 over REST, `isError` over
     MCP), MCP initialize/notifications/tools, and undo of a triage and of an edit.
+
+### Slice 10: One inbox (Shared is a feed)
+*"Links I share in and posts from blogs I follow are the same kind of thing: something to read at some point."*
+- Two jobs, not three views: **read at some point** (the Inbox) and **reference forever**
+  (starring, into the Library). Sending a link in is like a new post arriving; starring is
+  what you do after reading, whether it came from a feed or was shared in.
+- The Queue and Feeds tabs merge into one **Inbox** at `/`. Its chips are All, **Shared**
+  (the links you've sent in), then folders and feeds. All mixes shared links with unread
+  posts, newest first, unread first; a shared link's date is when it was (last) shared.
+- One gesture set for every row: swipe left is **Done** (a post is dismissed; a shared link
+  is archived, with Undo), swipe right is **☆ Star**. Later and the one-card queue view are
+  gone: leaving something unread already means "later".
+- Readers: Next (and Done on a shared link) goes to the top of the inbox, post or link.
+  Posts read in the app as before; shared links keep their preview page.
+- The nav badge counts unread posts plus shared links. `/feeds` redirects to `/`.
+  Mobile tabs: Inbox / Library / Save / Archive / Settings.
+- **Status:** built. No schema change: a shared link is a `links` row with
+  `status = 'queued'`, and the inbox merges those with unread entries in
+  `lib/server/inbox.ts`. Migration 0009 (data only) turns posts that had been queued from
+  their feed back into unread posts and drops the queue copy, unless it held a star, note
+  or tags (then it's archived); a queued link whose post was already pruned stays in
+  Shared. The API and MCP keep their shapes: `list_queue` and an empty search return
+  Shared (now newest first), and `triage_entry` `later` adds a post to Shared.
+  Also: paragraph spacing in the reader now applies inside the wrapper `<div>` many
+  feeds put around a post.
 
 ### Later / optional slices (pick by appetite)
 - **Snapshots:** keep a readable copy of reference articles in R2 so

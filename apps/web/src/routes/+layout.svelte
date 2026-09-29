@@ -17,17 +17,21 @@
 	const badge = (n: number) => (n > 99 ? '99+' : String(n));
 
 	const tabs = [
-		{ href: resolve('/'), label: 'Queue', icon: 'M6 3h12v18l-6-4-6 4z' },
 		{
-			href: resolve('/feeds'),
-			label: 'Feeds',
-			icon: 'M5 5a14 14 0 0 1 14 14M5 11a8 8 0 0 1 8 8M6 18h.01'
+			href: resolve('/'),
+			label: 'Inbox',
+			icon: 'M4 13l2.5-8h11l2.5 8v6H4zM4 13h5l1 2h4l1-2h5'
 		},
-		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
 		{
 			href: resolve('/library'),
 			label: 'Library',
 			icon: 'M4 4h5v16H4zM10 4h4v16h-4zM15.5 5l3.8-1 2.7 15.6-3.8 1z'
+		},
+		{ href: resolve('/save'), label: 'Save', icon: 'M12 5v14M5 12h14' },
+		{
+			href: resolve('/archive'),
+			label: 'Archive',
+			icon: 'M4 5h16v4H4zM5 9v10h14V9M10 13h4'
 		},
 		{
 			href: resolve('/settings'),
@@ -35,12 +39,13 @@
 			icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4'
 		}
 	];
+	// Posts and shared links belong to the inbox, and so do the feed settings.
 	const isActive = (href: string) =>
 		href === resolve('/')
-			? page.url.pathname === '/' || page.url.pathname.startsWith('/links')
-			: href === resolve('/feeds')
-				? page.url.pathname.startsWith(href) || page.url.pathname.startsWith('/entries')
-				: page.url.pathname.startsWith(href);
+			? ['/', '/links', '/entries', '/feeds'].some(
+					(p) => page.url.pathname === p || page.url.pathname.startsWith(`${p}/`)
+				)
+			: page.url.pathname.startsWith(href);
 </script>
 
 <svelte:head>
@@ -60,18 +65,11 @@
 			>
 				<a
 					href={resolve('/')}
-					aria-current={isActive('/') ? 'page' : undefined}
-					class="border-b-2 py-1.5 {isActive('/')
-						? 'border-accent text-ink'
-						: 'border-transparent text-ink-2 hover:text-ink'}">Queue</a
-				>
-				<a
-					href={resolve('/feeds')}
-					aria-current={isActive(resolve('/feeds')) ? 'page' : undefined}
-					class="border-b-2 py-1.5 {isActive(resolve('/feeds'))
+					aria-current={isActive(resolve('/')) ? 'page' : undefined}
+					class="border-b-2 py-1.5 {isActive(resolve('/'))
 						? 'border-accent text-ink'
 						: 'border-transparent text-ink-2 hover:text-ink'}"
-					>Feeds{#if data.unread}<span class="ml-1.5 text-accent">{badge(data.unread)}</span
+					>Inbox{#if data.unread}<span class="ml-1.5 text-accent">{badge(data.unread)}</span
 						>{/if}</a
 				>
 				<a
@@ -172,7 +170,7 @@
 					aria-hidden="true"><path d={tab.icon} /></svg
 				>
 				{tab.label}
-				{#if tab.label === 'Feeds' && data.unread}
+				{#if tab.label === 'Inbox' && data.unread}
 					<span
 						class="absolute top-1.5 left-1/2 ml-2 min-w-4.5 rounded-full bg-accent px-1 text-center text-[0.6875rem] leading-4.5 font-bold text-paper"
 						aria-label="{data.unread} unread">{badge(data.unread)}</span

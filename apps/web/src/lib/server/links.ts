@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { canonicalizeUrl, parseHttpUrl, parseTags, ulid } from '@reading-list/core';
 import { links, linkTags, tags, type Db, type Link } from '@reading-list/core/db';
 import { fetchPageMetadata } from './metadata';
@@ -46,7 +46,7 @@ export function mergeNote(existing: string | null, incoming: string | null | und
 /**
  * Saves a link for a user: resolves redirects, fetches preview metadata,
  * dedupes on the canonical URL and merges tags. Saving a link that's already
- * there updates it, merges the note, and puts it back in the queue.
+ * there updates it, merges the note, and puts it back in the inbox (Shared).
  */
 export async function saveLink(
 	db: Db,
@@ -131,11 +131,11 @@ export async function withTags(db: Db, rows: Link[]): Promise<LinkWithTags[]> {
 	return rows.map((r) => ({ ...r, tags: byLink.get(r.id) ?? [] }));
 }
 
-/** The queue, oldest first: "Later" bumps an item's queued_at, sending it to the back. */
+/** Shared links still to read (the inbox's Shared feed), newest first. */
 export async function getQueue(db: Db, userId: string, limit = 20) {
 	const where = and(eq(links.userId, userId), eq(links.status, 'queued'));
 	const [rows, [{ total }]] = await Promise.all([
-		db.select().from(links).where(where).orderBy(asc(links.queuedAt), asc(links.id)).limit(limit),
+		db.select().from(links).where(where).orderBy(desc(links.queuedAt), desc(links.id)).limit(limit),
 		db.select({ total: count() }).from(links).where(where)
 	]);
 	return { items: await withTags(db, rows), total };
@@ -194,15 +194,11 @@ async function changeLink(
 	return stateOf(before);
 }
 
-/** Finished: done with it. Leaves the queue for the archive. */
+/** Done: leaves the inbox's Shared feed for the archive. */
 export const finishLink = (db: Db, userId: string, id: string) =>
 	changeLink(db, userId, id, { status: 'archived', readAt: new Date() });
 
-/** Later: keep it, but move it to the back of the queue. */
-export const laterLink = (db: Db, userId: string, id: string) =>
-	changeLink(db, userId, id, { status: 'queued', queuedAt: new Date() });
-
-/** Back to the queue from the archive (at the back), or to an exact earlier state (undo). */
+/** Back into the inbox from the archive (as newly shared), or to an exact earlier state (undo). */
 export const requeueLink = (db: Db, userId: string, id: string, state?: QueueState) =>
 	changeLink(
 		db,
@@ -263,48 +259,7 @@ export async function deleteLink(db: Db, userId: string, id: string): Promise<bo
 	return deleted.length > 0;
 }
 
-/**
- * The queue items around a link, for "next" after Finished/Later and for J/K.
- * For a link that isn't queued, next is simply the front of the queue.
- */
-export async function queueNeighbors(db: Db, userId: string, link: Link) {
-	const queued = and(eq(links.userId, userId), eq(links.status, 'queued'));
-	const pick = { id: links.id };
-	if (link.status !== 'queued') {
-		const [next] = await db
-			.select(pick)
-			.from(links)
-			.where(queued)
-			.orderBy(asc(links.queuedAt), asc(links.id))
-			.limit(1);
-		return { prevId: null, nextId: next?.id ?? null };
-	}
-	const after = or(
-		gt(links.queuedAt, link.queuedAt),
-		and(eq(links.queuedAt, link.queuedAt), gt(links.id, link.id))
-	);
-	const before = or(
-		lt(links.queuedAt, link.queuedAt),
-		and(eq(links.queuedAt, link.queuedAt), lt(links.id, link.id))
-	);
-	const [[next], [prev]] = await Promise.all([
-		db
-			.select(pick)
-			.from(links)
-			.where(and(queued, after))
-			.orderBy(asc(links.queuedAt), asc(links.id))
-			.limit(1),
-		db
-			.select(pick)
-			.from(links)
-			.where(and(queued, before))
-			.orderBy(desc(links.queuedAt), desc(links.id))
-			.limit(1)
-	]);
-	return { prevId: prev?.id ?? null, nextId: next?.id ?? null };
-}
-
-/** Finished links, most recently finished first. */
+/** Links you're done with (and starred posts), most recent first. */
 export async function getArchive(db: Db, userId: string, limit = 50, offset = 0) {
 	const where = and(eq(links.userId, userId), eq(links.status, 'archived'));
 	const [rows, [{ total }]] = await Promise.all([
