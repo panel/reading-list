@@ -4,7 +4,7 @@
  * are the same whichever way an agent connects.
  */
 import { and, desc, eq } from 'drizzle-orm';
-import { decodeEntities, InvalidUrlError } from '@reading-list/core';
+import { decodeEntities, FeedNotFoundError, InvalidUrlError } from '@reading-list/core';
 import {
 	activity,
 	entryState,
@@ -24,7 +24,7 @@ import {
 	markRead,
 	setDismissed
 } from './entries';
-import { feedTitle, listSubscriptions } from './feeds';
+import { feedTitle, listSubscriptions, subscribe, unsubscribe } from './feeds';
 import {
 	appendNote,
 	deleteLink,
@@ -139,6 +139,7 @@ export type Undo =
 	| { type: 'deleteLink'; id: string }
 	| { type: 'restoreLink'; id: string; snapshot: LinkSnapshot }
 	| { type: 'entryState'; entryId: string; readAt: number | null; dismissedAt: number | null }
+	| { type: 'unsubscribe'; feedId: string }
 	| { type: 'all'; steps: Undo[] };
 
 async function snapshotLink(db: Db, userId: string, id: string): Promise<LinkSnapshot | null> {
@@ -190,6 +191,9 @@ async function applyUndo(db: Db, userId: string, undo: Undo): Promise<void> {
 			return;
 		case 'deleteLink':
 			await deleteLink(db, userId, undo.id);
+			return;
+		case 'unsubscribe':
+			await unsubscribe(db, userId, undo.feedId);
 			return;
 		case 'restoreLink': {
 			const s = undo.snapshot;
@@ -411,6 +415,49 @@ export async function listFeedsOp(ctx: AgentContext) {
 			folder: folder ?? null,
 			unread: Number(unread)
 		}))
+	};
+}
+
+/**
+ * Follows a site or feed URL (the page's advertised feed is found for a site).
+ * Its current posts are marked read, so only new posts reach the inbox.
+ */
+export async function addFeedOp(ctx: AgentContext, input: { url?: unknown; folder?: unknown }) {
+	need(ctx, 'feeds:write');
+	if (typeof input.url !== 'string' || !input.url.trim())
+		throw new ApiError(400, '"url" is required');
+	const folder = optionalString(input.folder, 'folder')?.trim() || null;
+	let result;
+	try {
+		result = await subscribe(ctx.db, ctx.user.id, input.url, { folder });
+	} catch (err) {
+		if (err instanceof InvalidUrlError || err instanceof FeedNotFoundError) {
+			throw new ApiError(400, err.message);
+		}
+		throw err;
+	}
+	const { feed, alreadySubscribed } = result;
+	const title = feedTitle(feed);
+	if (!alreadySubscribed) {
+		await record(ctx, 'feed.add', feed.id, `Followed “${title}”`, {
+			type: 'unsubscribe',
+			feedId: feed.id
+		});
+	}
+	const sub = (await listSubscriptions(ctx.db, ctx.user.id)).find((s) => s.feed.id === feed.id);
+	return {
+		alreadySubscribed,
+		message: alreadySubscribed
+			? `Already following ${title}`
+			: `Following ${title}. Its existing posts are marked read; new posts will show up in the inbox.`,
+		feed: {
+			id: feed.id,
+			title: sub ? feedTitle(sub.feed, sub.titleOverride) : title,
+			url: feed.url,
+			siteUrl: feed.siteUrl,
+			folder: sub?.folder ?? null,
+			unread: Number(sub?.unread ?? 0)
+		}
 	};
 }
 

@@ -66,13 +66,12 @@
 					if (result.type === 'success' && result.data?.subscribed) {
 						const s = result.data.subscribed as {
 							title: string;
-							newEntries: number;
 							alreadySubscribed: boolean;
 						};
 						toast.show({
 							message: s.alreadySubscribed
 								? `You already follow ${s.title}`
-								: `Following ${s.title} · ${s.newEntries} ${s.newEntries === 1 ? 'post' : 'posts'}`
+								: `Following ${s.title}. New posts will show up in your inbox.`
 						});
 					}
 				};

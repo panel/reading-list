@@ -36,12 +36,8 @@ export const actions: Actions = {
 	subscribe: async ({ locals, request }) => {
 		const url = String((await request.formData()).get('url') ?? '');
 		try {
-			const { feed, newEntries, alreadySubscribed } = await subscribe(
-				locals.db,
-				locals.user.id,
-				url
-			);
-			return { subscribed: { title: feedTitle(feed), newEntries, alreadySubscribed } };
+			const { feed, alreadySubscribed } = await subscribe(locals.db, locals.user.id, url);
+			return { subscribed: { title: feedTitle(feed), alreadySubscribed } };
 		} catch (err) {
 			if (err instanceof FeedNotFoundError || err instanceof InvalidUrlError) {
 				return fail(400, { url, error: err.message });

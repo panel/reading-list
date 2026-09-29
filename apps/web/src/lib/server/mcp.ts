@@ -4,6 +4,7 @@
  * every change is written to the activity log.
  */
 import {
+	addFeedOp,
 	ApiError,
 	getLinkOp,
 	listEntriesOp,
@@ -120,6 +121,27 @@ export const TOOLS: Tool[] = [
 		inputSchema: { type: 'object', properties: {} },
 		annotations: { readOnlyHint: true },
 		run: (ctx) => listFeedsOp(ctx)
+	},
+	{
+		name: 'add_feed',
+		title: 'Follow a feed',
+		description:
+			"Follows a blog or feed: give the site's URL (its advertised feed is found) or the feed URL itself. The posts it has now are marked read, so only new posts show up in the inbox. Following a feed that is already followed changes nothing.",
+		inputSchema: {
+			type: 'object',
+			properties: {
+				url: str('The site or feed URL'),
+				folder: str('Folder to put it in, e.g. "Tech" (optional)')
+			},
+			required: ['url']
+		},
+		annotations: {
+			readOnlyHint: false,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: true
+		},
+		run: (ctx, a) => addFeedOp(ctx, a)
 	},
 	{
 		name: 'list_unread_entries',

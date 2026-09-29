@@ -63,6 +63,17 @@ describe('handleMcp', () => {
 		expect(res.result.content[0].text).toContain('links:write');
 	});
 
+	it('needs feeds:write to follow a feed', async () => {
+		const res = (await handleMcp(ctx('feeds:read links:write'), {
+			jsonrpc: '2.0',
+			id: 8,
+			method: 'tools/call',
+			params: { name: 'add_feed', arguments: { url: 'https://blog.test' } }
+		})) as { result: { isError: boolean; content: { text: string }[] } };
+		expect(res.result.isError).toBe(true);
+		expect(res.result.content[0].text).toContain('feeds:write');
+	});
+
 	it('rejects unknown tools', async () => {
 		expect(await call('tools/call', { name: 'rm_rf' })).toMatchObject({ error: { code: -32602 } });
 	});

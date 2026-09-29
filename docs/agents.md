@@ -62,6 +62,7 @@ Adding OAuth would be its own piece of work.
 | `save_link` | `links:write` | Save a URL with a note and tags. Saving one that already exists merges the note and tags |
 | `update_link` | `links:write` | Replace or append to the note, replace tags, set `status` (`queued`/`archived`), star or unstar |
 | `list_feeds` | `feeds:read` | Followed feeds with unread counts |
+| `add_feed` | `feeds:write` | Follow a site or feed URL, optionally into a `folder`. Its existing posts start out read. Undo unfollows |
 | `list_unread_entries` | `feeds:read` | Posts, newest first, optionally for one feed |
 | `read_entry` | `feeds:read` | A post's text (up to 30,000 characters) |
 | `triage_entry` | `feeds:write` | `later` (add the post to Shared), `star`, `dismiss`, `read`, `unread` |
@@ -82,6 +83,7 @@ errors, `message`.
 | `GET /api/links/:id` | `links:read` | |
 | `PATCH /api/links/:id` | `links:write` | `{note?, appendNote?, tags?, status?: "queued"\|"archived", reference?: boolean}` |
 | `GET /api/feeds` | `feeds:read` | |
+| `POST /api/feeds` | `feeds:write` | `{url, folder?}`: a site or feed URL. Its existing posts start out read |
 | `GET /api/entries?unread=true&feed=…&limit=…` | `feeds:read` | |
 | `GET /api/entries/:id` | `feeds:read` | Includes `text` |
 | `POST /api/entries/:id` | `feeds:write` | `{action: "later"\|"star"\|"dismiss"\|"read"\|"unread"}` |

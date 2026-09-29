@@ -28,3 +28,4 @@ export {
 export { parseSearch, toFtsMatch, isEmptySearch, type SearchQuery, type SearchIs } from './search';
 export { parseOpml, toOpml, OpmlParseError, type OpmlFeed } from './opml';
 export { pruneEntries, type PruneOptions } from './feeds/prune';
+export { markBacklogRead } from './feeds/backlog';

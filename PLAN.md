@@ -379,6 +379,16 @@ pipeline.
   Starring from either reader opens the note-and-tags editor; once starred, the post
   reader shows your note with an Edit button.
 
+### Follow feeds from agents; a new feed's backlog starts out read
+- `POST /api/feeds {url, folder?}` and the MCP tool `add_feed` (scope `feeds:write`) follow a
+  site or feed URL the same way Manage feeds does. Each new follow goes in the activity log,
+  and Undo unfollows.
+- Following a feed marks the posts it already has as read (`markBacklogRead` in
+  `packages/core`), so only posts published from then on land in the inbox. This covers
+  Manage feeds, the API, MCP and OPML import. Feeds that are new to the app when imported
+  from OPML get the same treatment on their first successful fetch. Posts you had already
+  opened, starred or dismissed keep their state.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshots:** keep a readable copy of reference articles in R2 so
   link-rot doesn't eat your library. (Readability may need to run off the

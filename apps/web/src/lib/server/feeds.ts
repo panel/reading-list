@@ -1,6 +1,7 @@
 import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
 	findFeed,
+	markBacklogRead,
 	refreshFeed,
 	upsertFeed,
 	type OpmlFeed,
@@ -15,16 +16,26 @@ import {
 	type Feed
 } from '@reading-list/core/db';
 
-/** Finds the feed for a URL, stores it (shared) and subscribes the user. */
-export async function subscribe(db: Db, userId: string, input: string, fetchFn?: typeof fetch) {
+/**
+ * Finds the feed for a URL, stores it (shared) and subscribes the user. The
+ * posts it has now are marked read, so only posts from here on show up as new.
+ */
+export async function subscribe(
+	db: Db,
+	userId: string,
+	input: string,
+	{ folder, fetchFn }: { folder?: string | null; fetchFn?: typeof fetch } = {}
+) {
 	const found = await findFeed(input, fetchFn);
-	const { feed, newEntries } = await upsertFeed(db, found);
+	const { feed } = await upsertFeed(db, found);
 	const inserted = await db
 		.insert(subscriptions)
-		.values({ userId, feedId: feed.id })
+		.values({ userId, feedId: feed.id, folder: folder?.trim() || null })
 		.onConflictDoNothing()
 		.returning({ feedId: subscriptions.feedId });
-	return { feed, newEntries, alreadySubscribed: inserted.length === 0 };
+	const alreadySubscribed = inserted.length === 0;
+	if (!alreadySubscribed) await markBacklogRead(db, [feed.id], userId);
+	return { feed, alreadySubscribed };
 }
 
 export async function unsubscribe(db: Db, userId: string, feedId: string): Promise<boolean> {
@@ -149,6 +160,13 @@ export async function importFeeds(db: Db, userId: string, list: OpmlFeed[]) {
 			.values(rows.map((r) => ({ userId, feedId: r.id, folder: folderFor.get(r.url) ?? null })))
 			.onConflictDoNothing()
 			.returning({ feedId: subscriptions.feedId });
+		// Feeds someone already follows have posts: those are the backlog, not news.
+		// (New feeds get the same treatment on their first fetch.)
+		await markBacklogRead(
+			db,
+			inserted.map((i) => i.feedId),
+			userId
+		);
 		added += inserted.length;
 	}
 	return { added, alreadyFollowing: list.length - added };

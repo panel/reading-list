@@ -4,6 +4,7 @@ import { parseHttpUrl } from '../url';
 import { readHead } from '../metadata';
 import { COMMON_FEED_PATHS, discoverFeeds, looksLikeFeed } from './discover';
 import { FeedParseError, parseFeed, type ParsedFeed } from './parse';
+import { markBacklogRead } from './backlog';
 
 const USER_AGENT =
 	'Mozilla/5.0 (compatible; ReadingList/1.0; +https://reader.nelsonfamily.fyi) FeedFetcher';
@@ -253,7 +254,14 @@ export async function refreshFeed(
 		}
 		const body = await readBody(response);
 		const parsed = parseFeed(body, response.url || feed.url);
+		const hadEntries = await db.query.feedEntries.findFirst({
+			columns: { id: true },
+			where: eq(feedEntries.feedId, feed.id)
+		});
 		const newEntries = await ingestEntries(db, feed.id, parsed);
+		// The first posts a feed ever gets (e.g. one imported from OPML) are its
+		// archive, not news: mark them read for everyone already following it.
+		if (!hadEntries && newEntries > 0) await markBacklogRead(db, [feed.id], undefined, now);
 		await db
 			.update(feeds)
 			.set({
