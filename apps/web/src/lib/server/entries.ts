@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { canonicalizeUrl, ulid } from '@reading-list/core';
 import {
 	entryState,
@@ -68,9 +68,8 @@ export async function getInbox(
 	return { entries, unread };
 }
 
-/** One entry with its full content, if it's in a feed the user follows. */
-export async function getEntry(db: Db, userId: string, id: string) {
-	const [row] = await db
+function entryDetails(db: Db, userId: string) {
+	return db
 		.select({
 			...listFields,
 			content: feedEntries.content,
@@ -87,8 +86,34 @@ export async function getEntry(db: Db, userId: string, id: string) {
 			entryState,
 			and(eq(entryState.entryId, feedEntries.id), eq(entryState.userId, userId))
 		)
-		.leftJoin(links, and(eq(links.sourceEntryId, feedEntries.id), eq(links.userId, userId)))
-		.where(eq(feedEntries.id, id))
+		.leftJoin(links, and(eq(links.sourceEntryId, feedEntries.id), eq(links.userId, userId)));
+}
+
+/** One entry with its full content, if it's in a feed the user follows. */
+export async function getEntry(db: Db, userId: string, id: string) {
+	const [row] = await entryDetails(db, userId).where(eq(feedEntries.id, id)).limit(1);
+	return row ?? null;
+}
+
+/**
+ * The post behind a saved link, if it's in a feed the user follows: the one it
+ * was saved from, or one with the same URL (a post shared in by hand). Used to
+ * read the link in the app rather than only linking out.
+ */
+export async function entryForLink(
+	db: Db,
+	userId: string,
+	link: Pick<Link, 'sourceEntryId' | 'url' | 'canonicalUrl'>
+) {
+	const urls = [...new Set([link.url, link.canonicalUrl])];
+	const [row] = await entryDetails(db, userId)
+		.where(
+			link.sourceEntryId
+				? or(eq(feedEntries.id, link.sourceEntryId), inArray(feedEntries.url, urls))
+				: inArray(feedEntries.url, urls)
+		)
+		// Prefer the post it was saved from, then the newest copy.
+		.orderBy(sql`${feedEntries.id} = ${link.sourceEntryId ?? ''} desc`, desc(feedEntries.createdAt))
 		.limit(1);
 	return row ?? null;
 }

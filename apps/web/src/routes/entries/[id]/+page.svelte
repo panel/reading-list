@@ -2,6 +2,7 @@
 	import { deserialize, enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import { tick } from 'svelte';
 	import { ignoreShortcut } from '$lib/keys';
 	import { resolve } from '$app/paths';
 	import LinkImage from '$lib/components/LinkImage.svelte';
@@ -22,6 +23,8 @@
 				: resolve('/links/[id]', { id: data.next.id })
 	);
 	let starForm = $state<HTMLFormElement>();
+	let editingNote = $state(false);
+	let noteForm = $state<HTMLFormElement>();
 
 	// Lift toasts above this page's fixed action bar.
 	$effect(() => {
@@ -34,9 +37,14 @@
 		async ({ result, update }) => {
 			await update();
 			if (result.type === 'success') {
-				toast.show({
-					message: result.data?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
-				});
+				const starred = result.data?.done === 'starred';
+				toast.show({ message: starred ? 'Starred as a reference' : 'Unstarred' });
+				// Starring opens the note and tags, so you can say why it's worth keeping.
+				editingNote = starred;
+				if (starred) {
+					await tick();
+					noteForm?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				}
 			} else if (result.type === 'failure') {
 				toast.show({ message: String(result.data?.message ?? 'Couldn’t star this post') });
 			}
@@ -155,6 +163,77 @@
 				class="mt-6 flex h-12 items-center justify-center gap-2 rounded-md border border-rule-strong font-ui text-[0.9375rem] font-bold text-ink hover:border-ink"
 				>Read the original on {host} ↗</a
 			>
+		{/if}
+
+		{#if editingNote && data.link}
+			<form
+				bind:this={noteForm}
+				method="POST"
+				action="{resolve('/links/[id]', { id: data.link.id })}?/edit"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update({ reset: false });
+						if (result.type === 'success') {
+							editingNote = false;
+							toast.show({ message: 'Note saved' });
+						}
+					}}
+				class="mt-6 flex flex-col gap-2.5 rounded-md border border-accent bg-surface p-4"
+			>
+				<p class="kicker text-accent">★ In your library · add a note?</p>
+				<label for="save-note" class="sr-only">Note</label>
+				<textarea
+					id="save-note"
+					name="note"
+					rows="3"
+					placeholder="Why it's worth keeping, when you'd cite it…"
+					class="w-full resize-y rounded-md border border-rule-strong bg-surface px-3.5 py-3 text-[1.0625rem] leading-[1.55] placeholder:text-ink-3 focus:border-accent focus:outline-none"
+					>{data.link.note ?? ''}</textarea
+				>
+				<label for="save-tags" class="sr-only">Tags</label>
+				<input
+					id="save-tags"
+					name="tags"
+					type="text"
+					autocomplete="off"
+					autocapitalize="none"
+					value={data.link.tags.join(', ')}
+					placeholder="Tags, e.g. architecture, testing"
+					class="h-12 w-full rounded-md border border-rule-strong bg-surface px-3.5 font-ui text-base placeholder:text-ink-3 focus:border-accent focus:outline-none"
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						onclick={() => (editingNote = false)}
+						class="h-11 rounded-md px-4 font-ui text-sm font-bold text-ink-2 hover:text-ink"
+						>Skip</button
+					>
+					<button
+						class="h-11 rounded-md bg-ink px-5 font-ui text-sm font-bold text-paper hover:bg-accent-strong"
+						>Save</button
+					>
+				</div>
+			</form>
+		{:else if starred && data.link}
+			<div class="mt-6 flex flex-col gap-2 rounded-md bg-sunk px-4 py-3.5">
+				<div class="flex items-center justify-between gap-3">
+					<p class="kicker text-[0.6875rem] text-accent">★ Your note</p>
+					<button
+						type="button"
+						onclick={() => (editingNote = true)}
+						class="-my-2 h-10 px-2 font-ui text-sm font-bold text-accent hover:underline"
+						>{data.link.note || data.link.tags.length ? 'Edit' : 'Add a note'}</button
+					>
+				</div>
+				{#if data.link.note}
+					<p class="text-[1.0625rem] leading-[1.55] whitespace-pre-line">{data.link.note}</p>
+				{/if}
+				{#if data.link.tags.length}
+					<p class="font-ui text-[0.8125rem] text-ink-2">
+						{data.link.tags.map((t) => `#${t}`).join('  ')}
+					</p>
+				{/if}
+			</div>
 		{/if}
 
 		<form

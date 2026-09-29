@@ -1,0 +1,1 @@
+CREATE INDEX `feed_entries_url` ON `feed_entries` (`url`);

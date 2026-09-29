@@ -9,7 +9,7 @@ import {
 	setDismissed
 } from '$lib/server/entries';
 import { nextInboxItem } from '$lib/server/inbox';
-import { starLink } from '$lib/server/links';
+import { getLink, starLink } from '$lib/server/links';
 import { readingMinutes, sanitizeEntryHtml, withoutOpeningImage } from '$lib/server/sanitize';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -29,9 +29,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		minutes: readingMinutes(stripTags(entry.content ?? entry.summary ?? '')),
 		next: await nextInboxItem(locals.db, locals.user.id, entry.id),
 		// Starred already, whether from this post or saved by hand with the same URL.
-		link: await linkForEntry(locals.db, locals.user.id, entry).then((l) =>
-			l ? { id: l.id, isReference: l.isReference } : null
-		)
+		link: await linkForEntry(locals.db, locals.user.id, entry)
+			.then((l) => l && getLink(locals.db, locals.user.id, l.id))
+			.then((l) =>
+				l ? { id: l.id, isReference: l.isReference, note: l.note, tags: l.tags } : null
+			)
 	};
 };
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { deserialize, enhance } from '$app/forms';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import Favicon from '$lib/components/Favicon.svelte';
@@ -22,7 +22,40 @@
 	});
 
 	let editing = $state(false);
+	let noteSection = $state<HTMLElement>();
 	let busy = $state(false);
+
+	// Reading the post here counts as reading it in its feed, as in the post reader.
+	$effect(() => {
+		const post = data.post;
+		if (!post || post.read) return;
+		const body = new FormData();
+		body.set('read', 'true');
+		fetch(`${resolve('/entries/[id]', { id: post.id })}?/read`, {
+			method: 'POST',
+			body,
+			headers: { 'x-sveltekit-action': 'true' }
+		}).then(async (r) => {
+			if (deserialize(await r.text()).type === 'success') invalidateAll();
+		});
+	});
+
+	/** Star: when starring, open the note and tags so you can say why it's worth keeping. */
+	const star: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			if (result.type === 'failure') {
+				toast.show({ message: String(result.data?.message ?? 'Something went wrong') });
+			} else if (result.type === 'success') {
+				const starred = result.data?.done === 'starred';
+				toast.show({ message: starred ? 'Starred as a reference' : 'Unstarred' });
+				if (starred) {
+					editing = true;
+					noteSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				}
+			}
+		};
 	let finishButton = $state<HTMLButtonElement>();
 	let starForm = $state<HTMLFormElement>();
 
@@ -89,7 +122,11 @@
 
 <svelte:window {onkeydown} />
 
-<div class="mx-auto flex max-w-xl flex-col gap-4.5 px-5.5 pt-4 pb-24 lg:pt-10">
+<div
+	class="mx-auto flex flex-col gap-4.5 px-5.5 pt-4 pb-24 lg:pt-10 {data.post
+		? 'max-w-[44rem]'
+		: 'max-w-xl'}"
+>
 	<div class="flex items-center justify-between">
 		<a
 			href={resolve(archived ? '/archive' : '/')}
@@ -137,51 +174,85 @@
 		</form>
 	{/if}
 
-	<a
-		href={link.url}
-		target="_blank"
-		rel="noopener noreferrer"
-		class="group flex flex-col overflow-hidden rounded-md border border-rule bg-surface"
-	>
-		<LinkImage {link} class="h-49 lg:h-64" />
-		<div class="flex flex-col gap-2 px-4.5 pt-4 pb-4.5">
-			<div class="flex items-center gap-2 kicker text-accent">
-				<Favicon src={link.faviconUrl} />{siteLabel(link)}
-				{#if link.isReference}<span class="text-ink-3">· ★ Reference</span>{/if}
+	{#if data.post}
+		<!-- A post from a feed you follow: read it here, as in the post reader. -->
+		{#if link.imageUrl}
+			<LinkImage {link} class="h-[min(18.75rem,45vh)] rounded-md lg:h-[26rem]" />
+		{/if}
+		<header class="flex flex-col gap-3">
+			<div class="kicker text-accent">
+				{data.post.feedTitle} · {data.post.minutes} min read{#if link.isReference}<span
+						class="text-ink-3"
+					>
+						· ★ Reference</span
+					>{/if}
 			</div>
-			<h1 class="headline text-[1.7rem] leading-[1.1] group-hover:text-accent-strong lg:text-4xl">
+			<h1 class="headline text-[2.375rem] leading-[1.04] tracking-[-0.018em] lg:text-[3.25rem]">
 				{displayTitle(link)}
 			</h1>
-			{#if link.description}
-				<p class="text-base leading-normal text-ink-2">{link.description}</p>
-			{/if}
-			{#if link.author}
-				<p class="text-sm text-ink-3 italic">by {link.author}</p>
-			{/if}
-		</div>
-	</a>
-
-	<a
-		href={link.url}
-		target="_blank"
-		rel="noopener noreferrer"
-		class="flex h-13.5 items-center justify-center gap-2 rounded-md bg-ink font-ui text-base font-bold text-paper hover:bg-accent-strong"
-	>
-		Open on {host}
-		<svg
-			width="16"
-			height="16"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"><path d="M7 17L17 7" /><path d="M8 7h9v9" /></svg
+			<div
+				class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-y border-rule py-3.5 font-ui text-sm text-ink-2"
+			>
+				{#if data.post.author ?? link.author}<span class="font-bold text-ink"
+						>{data.post.author ?? link.author}</span
+					><span aria-hidden="true">·</span>{/if}
+				<a
+					href={link.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="font-bold text-accent hover:underline">{host} ↗</a
+				><span aria-hidden="true">·</span>
+				<span>{relativeDay(data.post.date)}</span>
+			</div>
+		</header>
+	{:else}
+		<a
+			href={link.url}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="group flex flex-col overflow-hidden rounded-md border border-rule bg-surface"
 		>
-	</a>
+			<LinkImage {link} class="h-49 lg:h-64" />
+			<div class="flex flex-col gap-2 px-4.5 pt-4 pb-4.5">
+				<div class="flex items-center gap-2 kicker text-accent">
+					<Favicon src={link.faviconUrl} />{siteLabel(link)}
+					{#if link.isReference}<span class="text-ink-3">· ★ Reference</span>{/if}
+				</div>
+				<h1 class="headline text-[1.7rem] leading-[1.1] group-hover:text-accent-strong lg:text-4xl">
+					{displayTitle(link)}
+				</h1>
+				{#if link.description}
+					<p class="text-base leading-normal text-ink-2">{link.description}</p>
+				{/if}
+				{#if link.author}
+					<p class="text-sm text-ink-3 italic">by {link.author}</p>
+				{/if}
+			</div>
+		</a>
+
+		<a
+			href={link.url}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="flex h-13.5 items-center justify-center gap-2 rounded-md bg-ink font-ui text-base font-bold text-paper hover:bg-accent-strong"
+		>
+			Open on {host}
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"><path d="M7 17L17 7" /><path d="M8 7h9v9" /></svg
+			>
+		</a>
+	{/if}
 
 	<section
+		bind:this={noteSection}
 		class="flex flex-col gap-2 rounded-md bg-sunk px-4 py-3.5"
 		aria-labelledby="note-heading"
 	>
@@ -261,6 +332,22 @@
 		{/if}
 	</section>
 
+	{#if data.post}
+		<!-- Sanitized server-side (sanitizeEntryHtml) and covered by the CSP. -->
+		<div class="prose mt-2">
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			{@html data.post.html}
+		</div>
+		<div aria-hidden="true" class="mt-2 text-center text-sm tracking-[0.4em] text-accent">■</div>
+		<a
+			href={link.url}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="flex h-12 items-center justify-center gap-2 rounded-md border border-rule-strong font-ui text-[0.9375rem] font-bold text-ink hover:border-ink"
+			>Read the original on {host} ↗</a
+		>
+	{/if}
+
 	<form
 		method="POST"
 		action={action('addNote')}
@@ -339,14 +426,7 @@
 	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
 >
 	<div class="mx-auto flex max-w-xl gap-2 px-3.5 py-2.5">
-		<form
-			bind:this={starForm}
-			method="POST"
-			action={action('star')}
-			use:enhance={withToast((d) =>
-				d?.done === 'starred' ? 'Starred as a reference' : 'Unstarred'
-			)}
-		>
+		<form bind:this={starForm} method="POST" action={action('star')} use:enhance={star}>
 			<input type="hidden" name="starred" value={String(!link.isReference)} />
 			<button
 				aria-label={link.isReference ? 'Unstar' : 'Star as reference'}
