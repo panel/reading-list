@@ -10,8 +10,8 @@ export const MATCH_END = '\u0002';
 export type SearchResult = LinkWithTags & { snippet: string | null };
 
 // Column weights for bm25, in links_fts column order:
-// title, description, note, tags, site, author, url.
-const RANK = sql`bm25(links_fts, 10.0, 2.0, 5.0, 6.0, 3.0, 3.0, 1.0)`;
+// title, description, note, tags, site, author, url, body (a starred link's article text).
+const RANK = sql`bm25(links_fts, 10.0, 2.0, 5.0, 6.0, 3.0, 3.0, 1.0, 1.0)`;
 
 function filters(q: SearchQuery): SQL[] {
 	const where: SQL[] = [];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { matchPoll, pollUrl, PRUNE_CRON } from './poll';
+import { archiveUrl, isKick, KICK_URL, matchArchive, matchPoll, pollUrl, PRUNE_CRON } from './poll';
 
 describe('matchPoll', () => {
 	const id = '01M3KW4JM8VYYV82Z9MC6HVAC0';
@@ -16,6 +16,18 @@ describe('matchPoll', () => {
 		new Request('https://fetcher.internal/', { method: 'POST' })
 	])('rejects %s', (request) => {
 		expect(matchPoll(request)).toBeNull();
+	});
+});
+
+describe('matchArchive and isKick', () => {
+	const id = '01M3KW4JM8VYYV82Z9MC6HVAC0';
+
+	it('accepts POST /archive/:id and POST /archive/kick only', () => {
+		expect(matchArchive(new Request(archiveUrl(id), { method: 'POST' }))).toBe(id);
+		expect(matchArchive(new Request(archiveUrl(id)))).toBeNull();
+		expect(matchArchive(new Request(KICK_URL, { method: 'POST' }))).toBeNull();
+		expect(isKick(new Request(KICK_URL, { method: 'POST' }))).toBe(true);
+		expect(isKick(new Request(KICK_URL))).toBe(false);
 	});
 });
 

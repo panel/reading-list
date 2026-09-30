@@ -233,6 +233,43 @@ export const activity = sqliteTable(
 	(t) => [index('activity_user_created').on(t.userId, t.createdAt)]
 );
 
+/**
+ * A readable copy of a saved link's article (Slice 11), captured off the
+ * request path by the fetcher. One row per link that needs a copy: links in
+ * the inbox and starred links. Triggers on `links` (migration 0011) create the
+ * row and set keep_until: null while the link is in the inbox or starred, and
+ * Done + 14 days otherwise; the nightly prune deletes rows past keep_until.
+ */
+export const linkArchives = sqliteTable(
+	'link_archives',
+	{
+		linkId: text('link_id')
+			.primaryKey()
+			.references(() => links.id, { onDelete: 'cascade' }),
+		status: text('status', { enum: ['pending', 'fetching', 'ready', 'failed'] })
+			.notNull()
+			.default('pending'),
+		// Where the copy came from: the page itself, or a feed post's content.
+		source: text('source', { enum: ['page', 'feed'] }),
+		html: text('html'),
+		// Plain text: word count, and the search index for starred links.
+		text: text('text'),
+		words: integer('words'),
+		attempts: integer('attempts').notNull().default(0),
+		lastError: text('last_error'),
+		claimedAt: timestamp('claimed_at'),
+		capturedAt: timestamp('captured_at'),
+		keepUntil: timestamp('keep_until'),
+		updatedAt: timestampNow('updated_at')
+	},
+	(t) => [
+		index('link_archives_status').on(t.status, t.updatedAt),
+		index('link_archives_keep_until').on(t.keepUntil),
+		check('link_archives_status', sql`${t.status} IN ('pending', 'fetching', 'ready', 'failed')`),
+		check('link_archives_source', sql`${t.source} IN ('page', 'feed')`)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
@@ -241,3 +278,4 @@ export type ApiToken = typeof apiTokens.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
 export type Feed = typeof feeds.$inferSelect;
 export type FeedEntry = typeof feedEntries.$inferSelect;
+export type LinkArchive = typeof linkArchives.$inferSelect;

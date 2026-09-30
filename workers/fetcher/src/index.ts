@@ -1,22 +1,67 @@
 import { eq } from 'drizzle-orm';
-import { pruneEntries, refreshFeed } from '@reading-list/core';
-import { feeds, getDb } from '@reading-list/core/db';
-import { dueFeeds, matchPoll, pollUrl, PRUNE_CRON } from './poll';
+import {
+	captureArchive,
+	claimArchives,
+	pruneArchives,
+	pruneEntries,
+	refreshFeed
+} from '@reading-list/core';
+import { feeds, getDb, type Db } from '@reading-list/core/db';
+import {
+	archiveUrl,
+	dueFeeds,
+	isKick,
+	matchArchive,
+	matchPoll,
+	MAX_ARCHIVES_PER_RUN,
+	pollUrl,
+	PRUNE_CRON
+} from './poll';
 
 /**
- * Feed poller. Every 15 minutes the cron picks the feeds that are due and
- * sends each to /poll/:id on this same Worker (through the SELF service
- * binding), so every feed is fetched and parsed in its own invocation with its
- * own CPU budget. There are no public routes; only SELF can call fetch().
+ * Claims pending readable copies and captures each in its own invocation
+ * (through SELF), like feed polls, so a heavy page gets a fresh CPU budget.
+ */
+async function dispatchArchives(
+	db: Db,
+	env: Env,
+	now: Date
+): Promise<{ archived: number; ready: number }> {
+	const ids = await claimArchives(db, MAX_ARCHIVES_PER_RUN, now);
+	const outcomes = await Promise.allSettled(
+		ids.map(async (id): Promise<{ status: string }> => {
+			const response: Response = await env.SELF.fetch(archiveUrl(id), { method: 'POST' });
+			if (!response.ok) throw new Error(`archive ${id}: returned ${response.status}`);
+			return (await response.json()) as { status: string };
+		})
+	);
+	const ready = outcomes.filter((o) => o.status === 'fulfilled' && o.value.status === 'ready');
+	for (const o of outcomes) if (o.status === 'rejected') console.error(o.reason);
+	return { archived: ids.length, ready: ready.length };
+}
+
+/**
+ * Feed poller and page archiver. Every 15 minutes the cron picks the feeds
+ * that are due and sends each to /poll/:id on this same Worker (through the
+ * SELF service binding), so every feed is fetched and parsed in its own
+ * invocation with its own CPU budget. Readable copies of saved links work the
+ * same way through /archive/:id; the web app nudges /archive/kick after a
+ * change so new copies don't wait for the cron. There are no public routes:
+ * only SELF and the web app's FETCHER binding can call fetch().
  */
 export default {
 	async scheduled(controller, env) {
 		const db = getDb(env.DB);
+		const now = new Date(controller.scheduledTime);
 		if (controller.cron === PRUNE_CRON) {
-			console.log(JSON.stringify({ pruned: await pruneEntries(db) }));
+			const pruned = await pruneEntries(db);
+			console.log(JSON.stringify({ pruned, prunedArchives: await pruneArchives(db, now) }));
 			return;
 		}
-		const due = await dueFeeds(db, new Date(controller.scheduledTime));
+		// Copies first: they're few, and the feeds' fan-out can use the rest of the budget.
+		const archives = await dispatchArchives(db, env, now);
+		if (archives.archived) console.log(JSON.stringify(archives));
+		const due = await dueFeeds(db, now);
 		if (due.length === 0) return;
 
 		const outcomes = await Promise.allSettled(
@@ -42,6 +87,16 @@ export default {
 	},
 
 	async fetch(request, env) {
+		if (isKick(request)) {
+			return Response.json(await dispatchArchives(getDb(env.DB), env, new Date()));
+		}
+		const linkId = matchArchive(request);
+		if (linkId) {
+			const result = await captureArchive(getDb(env.DB), linkId);
+			if (result.status === 'failed') console.warn(`archive ${linkId}: ${result.error}`);
+			return Response.json(result);
+		}
+
 		const feedId = matchPoll(request);
 		if (!feedId) return new Response('Not found', { status: 404 });
 

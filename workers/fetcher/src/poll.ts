@@ -7,6 +7,7 @@ import { feeds, subscriptions, type Db } from '@reading-list/core/db';
  * fewer than this come due in a 15-minute tick.
  */
 export const MAX_FEEDS_PER_TICK = 40;
+// (The cron also dispatches up to MAX_ARCHIVES_PER_RUN readable copies: 45 in all.)
 
 /** Feeds that someone follows and that are due for a check, most overdue first. */
 export function dueFeeds(db: Db, now: Date, limit = MAX_FEEDS_PER_TICK) {
@@ -40,3 +41,21 @@ export function matchPoll(request: Request): string | null {
 	if (request.method !== 'POST') return null;
 	return new URL(request.url).pathname.match(POLL_PATH)?.[1] ?? null;
 }
+
+/** Readable copies captured per cron tick or per kick; each is one subrequest. */
+export const MAX_ARCHIVES_PER_RUN = 5;
+
+const ARCHIVE_PATH = /^\/archive\/([0-9A-HJKMNP-TV-Z]{26})$/;
+
+export const archiveUrl = (linkId: string) => `https://fetcher.internal/archive/${linkId}`;
+/** Called by the web app (FETCHER binding) after a change that may need a copy. */
+export const KICK_URL = 'https://fetcher.internal/archive/kick';
+
+/** The link id from a POST /archive/:id request, or null. */
+export function matchArchive(request: Request): string | null {
+	if (request.method !== 'POST') return null;
+	return new URL(request.url).pathname.match(ARCHIVE_PATH)?.[1] ?? null;
+}
+
+export const isKick = (request: Request) =>
+	request.method === 'POST' && new URL(request.url).pathname === '/archive/kick';

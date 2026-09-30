@@ -389,10 +389,46 @@ pipeline.
   from OPML get the same treatment on their first successful fetch. Posts you had already
   opened, starred or dismissed keep their state.
 
+### Slice 11: Readable copies of saved links
+*"Read saved links in the app, and keep the ones I star even if the site goes away."*
+- Every link in the inbox and every starred link gets a **readable copy**: the article
+  pulled out of the page, shown on the link page in the same reader as feed posts, with
+  "Read the original" at the end.
+- **Retention:** copies are kept while the link is in the inbox or starred. Done and not
+  starred: kept for 14 days from Done (unstarring a finished link also starts 14 days),
+  then deleted by the nightly prune. The link, note and tags stay; the page offers
+  "Make a readable copy" again.
+- **Search:** a starred link's article text is in the search index, so the library is
+  searchable by what articles say. Other copies aren't indexed.
+- Images stay links to the original site for now.
+- **Status:** built.
+  - Extractor (`packages/core/src/article.ts`): a small pure-TypeScript HTML parser plus
+    Readability-style scoring (paragraph text scores its containers; link-heavy clutter,
+    menus, share bars, comments and hidden elements are dropped), emitting a small set of
+    tags with absolute URLs, lazy images resolved. It runs in Workers, the dev server and
+    tests alike (HTMLRewriter doesn't run in the last two). Pages with one `<article>` or a
+    `<main>` parse only that part: about 1 ms for a 500 KB page. A page without either
+    that is 500 KB of dense markup takes about 30 ms, over Workers Free's 10 ms; if a real
+    one hits the limit, its capture times out, is retried twice, then shows as failed.
+    **Watch:** failure rates on real sites; the fallback plan is Workers Paid
+    (Readability) or Browser Rendering.
+  - Capture (`packages/core/src/archive.ts`): a feed post's full text when a feed has it
+    (no fetch), else the page; under 100 words counts as no article (a short feed post is
+    used rather than nothing). 404s, non-HTML and "no article" fail at once; timeouts and
+    5xx retry up to 3 times, an hour apart.
+  - Migration 0011: `link_archives` (one row per link needing a copy). Triggers on `links`
+    create rows and set `keep_until`, so every path (UI, API, agents, undo) follows the
+    same rules; existing inbox and starred links were queued for capture. The FTS table
+    was rebuilt with a `body` column, filled by triggers for starred links only.
+  - The fetcher claims copies (5 per run) and captures each in its own invocation via
+    `SELF`, from the 15-minute cron and from `POST /archive/kick`, which the web app calls
+    through a new `FETCHER` service binding after every write (in dev, the web app
+    captures inline). The 03:47 prune deletes expired copies.
+  - `get_link` (MCP) and `GET /api/links/:id` return the copy's text.
+
 ### Later / optional slices (pick by appetite)
-- **Snapshots:** keep a readable copy of reference articles in R2 so
-  link-rot doesn't eat your library. (Readability may need to run off the
-  request path because of CPU limits.)
+- **Snapshot images:** copy starred links' images to R2 so dead images don't break
+  the library (Slice 11 keeps text only).
 - **Semantic search:** embed title, description, and note with Workers AI and
   store them in Vectorize; "more like this" on any link.
 - **Public share pages:** a read-only public URL for a tag or collection

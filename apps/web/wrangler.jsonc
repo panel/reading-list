@@ -34,6 +34,15 @@
 			"migrations_dir": "../../migrations"
 		}
 	],
+	// The feed fetcher also captures readable copies of saved links. After a
+	// change the app nudges it (POST /archive/kick) so a new copy doesn't wait
+	// for the next cron run. Deploy the fetcher before the first deploy with this.
+	"services": [
+		{
+			"binding": "FETCHER",
+			"service": "reading-list-fetcher"
+		}
+	],
 	"vars": {
 		// Zero Trust team domain (see docs/setup.md)
 		"ACCESS_TEAM_DOMAIN": "https://abbyandpaulnelson.cloudflareaccess.com",

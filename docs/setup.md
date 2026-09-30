@@ -114,6 +114,10 @@ app refuses every request with a 500.
    deploy again. Check it's running under Workers & Pages →
    reading-list-fetcher → Logs; each run logs `{"polled":…,"newEntries":…,"failed":…}`.
 
+   The fetcher also saves readable copies of links (Slice 11). The web app
+   reaches it through a `FETCHER` service binding, so deploy the fetcher
+   before the web app whenever both change.
+
 6. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
    API Tokens → Create Token → "Edit Cloudflare Workers" template, then add
    **Account → D1 → Edit**). In the GitHub repo settings:

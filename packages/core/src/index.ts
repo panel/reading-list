@@ -29,3 +29,12 @@ export { parseSearch, toFtsMatch, isEmptySearch, type SearchQuery, type SearchIs
 export { parseOpml, toOpml, OpmlParseError, type OpmlFeed } from './opml';
 export { pruneEntries, type PruneOptions } from './feeds/prune';
 export { markBacklogRead } from './feeds/backlog';
+export { extractArticle, articleFromHtml, type Article } from './article';
+export {
+	captureArchive,
+	claimArchives,
+	pruneArchives,
+	requestArchive,
+	MIN_WORDS,
+	type CaptureResult
+} from './archive';

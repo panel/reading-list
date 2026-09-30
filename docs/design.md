@@ -130,16 +130,21 @@ Keys in the post reader: `S` star, `J`/`E` next, `O` original.
 - **⌘K** (or `/`) anywhere: find a link, `↵` copies its URL, `⌘↵` opens it.
   On mobile, the search icon in the header opens `/search`.
 
-**Saved links (not feed posts): link out.**
+**Saved links: read in the app when there's a copy (Slice 11), else link out.**
 
-- A preview box built from og:image, site and favicon, og:title,
+- With a readable copy (or a matching post from a feed you follow): the same
+  layout as the post reader: kicker, headline, byline strip, a small status
+  line ("Saved copy · today · kept until Oct 14 (star it to keep it)"), your
+  note, the article, "Read the original".
+- Without one: a preview box built from og:image, site and favicon, og:title,
   og:description and author, captured at save time. Tapping it opens the
-  original.
+  original. The status line says "Saving a readable copy…" (the page checks
+  back by itself), or why it failed with "Try again", or that it was cleared
+  14 days after Done, with "Make a readable copy".
 - A prominent "Open on <site> ↗" button, then the note, the notes box, Up
   next, and a bottom bar: ☆ / Copy link / **Done**. Done archives the link and
   opens the top of the inbox. Keys: `E` done, `S` star, `J` next, `O` open.
-- We don't extract article text for saved links. If that's wanted later, it
-  becomes its own slice.
+- Copies keep text and structure; images still load from the original site.
 
 **Desktop:** the inbox is a single centered column. The top nav has Inbox
 (with the unread count) / Library / Archive / Settings, search (⌘K) and Save a

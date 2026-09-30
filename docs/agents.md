@@ -58,7 +58,7 @@ Adding OAuth would be its own piece of work.
 | --- | --- | --- |
 | `search_links` | `links:read` | Search with the app's syntax: words, `"phrases"`, `-word`, `tag:`, `site:`, `is:ref\|queued\|archived` |
 | `list_queue` | `links:read` | Shared links still to read (the inbox's Shared feed), newest first |
-| `get_link` | `links:read` | One link with note and tags |
+| `get_link` | `links:read` | One link with note and tags, plus its saved readable copy's `text` when there is one |
 | `save_link` | `links:write` | Save a URL with a note and tags. Saving one that already exists merges the note and tags |
 | `update_link` | `links:write` | Replace or append to the note, replace tags, set `status` (`queued`/`archived`), star or unstar |
 | `list_feeds` | `feeds:read` | Followed feeds with unread counts |

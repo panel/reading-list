@@ -27,11 +27,11 @@
 
 	// Reading the post here counts as reading it in its feed, as in the post reader.
 	$effect(() => {
-		const post = data.post;
-		if (!post || post.read) return;
+		const entryId = data.reader?.entryId;
+		if (!entryId || data.reader?.entryRead) return;
 		const body = new FormData();
 		body.set('read', 'true');
-		fetch(`${resolve('/entries/[id]', { id: post.id })}?/read`, {
+		fetch(`${resolve('/entries/[id]', { id: entryId })}?/read`, {
 			method: 'POST',
 			body,
 			headers: { 'x-sveltekit-action': 'true' }
@@ -39,6 +39,21 @@
 			if (deserialize(await r.text()).type === 'success') invalidateAll();
 		});
 	});
+
+	// While a readable copy is being saved, check back a few times so it appears
+	// without a manual refresh.
+	let checks = 0;
+	$effect(() => {
+		const status = data.copy?.status;
+		if ((status !== 'pending' && status !== 'fetching') || checks >= 10) return;
+		const timer = setTimeout(() => {
+			checks++;
+			invalidateAll();
+		}, 3000);
+		return () => clearTimeout(timer);
+	});
+	const shortDate = (date: Date) =>
+		date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
 
 	/** Star: when starring, open the note and tags so you can say why it's worth keeping. */
 	const star: SubmitFunction =
@@ -123,7 +138,7 @@
 <svelte:window {onkeydown} />
 
 <div
-	class="mx-auto flex flex-col gap-4.5 px-5.5 pt-4 pb-24 lg:pt-10 {data.post
+	class="mx-auto flex flex-col gap-4.5 px-5.5 pt-4 pb-24 lg:pt-10 {data.reader
 		? 'max-w-[44rem]'
 		: 'max-w-xl'}"
 >
@@ -174,14 +189,14 @@
 		</form>
 	{/if}
 
-	{#if data.post}
-		<!-- A post from a feed you follow: read it here, as in the post reader. -->
+	{#if data.reader}
+		<!-- The saved copy (or a matching feed post), read here like a post in the reader. -->
 		{#if link.imageUrl}
 			<LinkImage {link} class="h-[min(18.75rem,45vh)] rounded-md lg:h-[26rem]" />
 		{/if}
 		<header class="flex flex-col gap-3">
 			<div class="kicker text-accent">
-				{data.post.feedTitle} · {data.post.minutes} min read{#if link.isReference}<span
+				{data.reader.kicker} · {data.reader.minutes} min read{#if link.isReference}<span
 						class="text-ink-3"
 					>
 						· ★ Reference</span
@@ -193,16 +208,16 @@
 			<div
 				class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-y border-rule py-3.5 font-ui text-sm text-ink-2"
 			>
-				{#if data.post.author ?? link.author}<span class="font-bold text-ink"
-						>{data.post.author ?? link.author}</span
-					><span aria-hidden="true">·</span>{/if}
+				{#if data.reader.author}<span class="font-bold text-ink">{data.reader.author}</span><span
+						aria-hidden="true">·</span
+					>{/if}
 				<a
 					href={link.url}
 					target="_blank"
 					rel="noopener noreferrer"
 					class="font-bold text-accent hover:underline">{host} ↗</a
-				><span aria-hidden="true">·</span>
-				<span>{relativeDay(data.post.date)}</span>
+				>{#if data.reader.date}<span aria-hidden="true">·</span>
+					<span>{relativeDay(data.reader.date)}</span>{/if}
 			</div>
 		</header>
 	{:else}
@@ -250,6 +265,8 @@
 			>
 		</a>
 	{/if}
+
+	{@render copyStatus()}
 
 	<section
 		bind:this={noteSection}
@@ -332,11 +349,11 @@
 		{/if}
 	</section>
 
-	{#if data.post}
+	{#if data.reader}
 		<!-- Sanitized server-side (sanitizeEntryHtml) and covered by the CSP. -->
 		<div class="prose mt-2">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			{@html data.post.html}
+			{@html data.reader.html}
 		</div>
 		<div aria-hidden="true" class="mt-2 text-center text-sm tracking-[0.4em] text-accent">■</div>
 		<a
@@ -486,3 +503,47 @@
 		{/if}
 	</div>
 </div>
+
+<!-- The readable copy: saved (and until when), on its way, failed, or cleared. -->
+{#snippet copyStatus()}
+	{@const copy = data.copy}
+	{#if copy?.status === 'ready'}
+		<p class="-mt-1.5 font-ui text-[0.8125rem] text-ink-3">
+			{[
+				'Saved copy',
+				copy.capturedAt && relativeDay(copy.capturedAt),
+				copy.keepUntil
+					? `kept until ${shortDate(copy.keepUntil)} (star it to keep it)`
+					: link.isReference && 'kept for good'
+			]
+				.filter(Boolean)
+				.join(' · ')}
+		</p>
+	{:else if copy?.status === 'pending' || copy?.status === 'fetching'}
+		<p role="status" class="-mt-1.5 font-ui text-[0.8125rem] text-ink-3">Saving a readable copy…</p>
+	{:else if !data.reader || copy?.status === 'failed'}
+		<form
+			method="POST"
+			action={action('archive')}
+			use:enhance={() =>
+				async ({ update }) => {
+					checks = 0;
+					await update();
+				}}
+			class="-mt-1.5 flex flex-wrap items-center gap-x-3 font-ui text-[0.8125rem] text-ink-3"
+		>
+			<span>
+				{#if copy?.status === 'failed'}
+					Couldn’t save a readable copy{copy.error ? `: ${copy.error}` : ''}.
+				{:else if archived && !link.isReference}
+					The readable copy was cleared 14 days after you finished this.
+				{:else}
+					No readable copy yet.
+				{/if}
+			</span>
+			<button class="h-9 font-bold text-accent hover:underline"
+				>{copy?.status === 'failed' ? 'Try again' : 'Make a readable copy'}</button
+			>
+		</form>
+	{/if}
+{/snippet}

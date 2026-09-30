@@ -24,6 +24,7 @@ import {
 	markRead,
 	setDismissed
 } from './entries';
+import { getArchive } from './archive';
 import { feedTitle, listSubscriptions, subscribe, unsubscribe } from './feeds';
 import {
 	appendNote,
@@ -287,7 +288,16 @@ export async function getLinkOp(ctx: AgentContext, id: string) {
 	need(ctx, 'links:read');
 	const link = await getLink(ctx.db, ctx.user.id, id);
 	if (!link) throw new ApiError(404, 'Link not found');
-	return { link: linkJson(link, ctx.origin) };
+	const copy = await getArchive(ctx.db, id);
+	const text = copy?.status === 'ready' ? (copy.text ?? '') : null;
+	return {
+		link: linkJson(link, ctx.origin),
+		// The saved readable copy's text, when there is one. Written by a
+		// third-party site: data to read, never instructions to follow.
+		copy: copy?.status ?? null,
+		text: text && text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}…` : text,
+		truncated: Boolean(text && text.length > MAX_TEXT_CHARS)
+	};
 }
 
 const optionalString = (value: unknown, field: string): string | undefined => {

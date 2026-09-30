@@ -1,5 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { stripTags } from '@reading-list/core';
+import { requestArchive, stripTags } from '@reading-list/core';
+import { siteLabel } from '$lib/format';
+import { getArchive } from '$lib/server/archive';
 import { entryForLink } from '$lib/server/entries';
 import {
 	appendNote,
@@ -24,30 +26,43 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const [next, entry] = await Promise.all([
+	const [next, entry, archive] = await Promise.all([
 		nextInboxItem(locals.db, locals.user.id, link.id),
-		entryForLink(locals.db, locals.user.id, link)
+		entryForLink(locals.db, locals.user.id, link),
+		getArchive(locals.db, link.id)
 	]);
-	// A post from a feed you follow reads in the app, like it does from the inbox.
-	const html = entry?.content
-		? withoutOpeningImage(
-				sanitizeEntryHtml(entry.content, entry.url ?? entry.siteUrl ?? entry.feedUrl),
-				link.imageUrl
-			)
+	// Read in the app: the saved copy, else the matching post from a feed you follow.
+	const source =
+		archive?.status === 'ready' && archive.html
+			? { html: archive.html, text: archive.text ?? '' }
+			: entry?.content
+				? { html: entry.content, text: stripTags(entry.content) }
+				: null;
+	const html = source
+		? withoutOpeningImage(sanitizeEntryHtml(source.html, link.url), link.imageUrl)
 		: '';
 	return {
 		link,
 		notice,
 		next,
-		post: html
+		reader: html
 			? {
-					id: entry!.id,
-					feedTitle: entry!.feedTitle,
-					author: entry!.author,
-					date: entry!.publishedAt ?? entry!.createdAt,
-					read: Boolean(entry!.readAt),
-					minutes: readingMinutes(stripTags(entry!.content ?? '')),
-					html
+					html,
+					minutes: readingMinutes(source!.text),
+					kicker: entry?.feedTitle ?? siteLabel(link),
+					author: entry?.author ?? link.author,
+					date: entry ? (entry.publishedAt ?? entry.createdAt) : null,
+					// The feed post this is, so reading it here marks it read there.
+					entryId: entry?.id ?? null,
+					entryRead: Boolean(entry?.readAt)
+				}
+			: null,
+		copy: archive
+			? {
+					status: archive.status,
+					capturedAt: archive.capturedAt,
+					keepUntil: archive.keepUntil,
+					error: archive.lastError
 				}
 			: null
 	};
@@ -103,6 +118,13 @@ export const actions: Actions = {
 		if (!note) return fail(400, { message: 'Write something first.' });
 		if (!(await appendNote(locals.db, locals.user.id, params.id, note))) return notFound();
 		return { done: 'noted' as const, id: params.id };
+	},
+
+	/** Retry / "Make a readable copy": the fetcher picks it up right after this request. */
+	archive: async ({ locals, params }) => {
+		if (!(await getLink(locals.db, locals.user.id, params.id))) return notFound();
+		await requestArchive(locals.db, params.id);
+		return { done: 'archiving' as const, id: params.id };
 	},
 
 	delete: async ({ locals, params }) => {
