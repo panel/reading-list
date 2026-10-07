@@ -25,6 +25,7 @@ const listFields = {
 	createdAt: feedEntries.createdAt,
 	feedTitle: sql<string>`coalesce(${subscriptions.titleOverride}, ${feeds.title}, ${feeds.url})`,
 	readAt: entryState.readAt,
+	openedAt: entryState.openedAt,
 	// Set when the post was saved or starred from the feed.
 	linkId: links.id,
 	linkStatus: links.status,
@@ -125,6 +126,37 @@ export async function markRead(db: Db, userId: string, entryId: string, read = t
 		.onConflictDoUpdate({
 			target: [entryState.userId, entryState.entryId],
 			set: { readAt: read ? sql`coalesce(${entryState.readAt}, excluded.read_at)` : null }
+		});
+}
+
+/**
+ * Opened in a reader (the post page, or a shared link's page showing this post):
+ * marks it read and records when it was first opened. Unlike markRead, which
+ * agents and the Mark read button use, this is what Slice 12 counts as reading.
+ */
+export async function markOpened(db: Db, userId: string, entryId: string) {
+	const now = new Date();
+	await db
+		.insert(entryState)
+		.values({ userId, entryId, readAt: now, openedAt: now })
+		.onConflictDoUpdate({
+			target: [entryState.userId, entryState.entryId],
+			set: {
+				readAt: sql`coalesce(${entryState.readAt}, excluded.read_at)`,
+				openedAt: sql`coalesce(${entryState.openedAt}, excluded.opened_at)`
+			}
+		});
+}
+
+/** The post's URL was copied: a sign it's being used as a reference. */
+export async function markCited(db: Db, userId: string, entryId: string) {
+	const now = new Date();
+	await db
+		.insert(entryState)
+		.values({ userId, entryId, citedAt: now })
+		.onConflictDoUpdate({
+			target: [entryState.userId, entryState.entryId],
+			set: { citedAt: now }
 		});
 }
 

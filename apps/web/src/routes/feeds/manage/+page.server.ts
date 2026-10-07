@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { FeedNotFoundError, InvalidUrlError, OpmlParseError, parseOpml } from '@reading-list/core';
 import {
+	feedOpenRates,
 	feedTitle,
 	importFeeds,
 	listSubscriptions,
@@ -14,7 +15,10 @@ import type { Actions, PageServerLoad } from './$types';
 const MAX_OPML_BYTES = 1024 * 1024;
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const subs = await listSubscriptions(locals.db, locals.user.id);
+	const [subs, rates] = await Promise.all([
+		listSubscriptions(locals.db, locals.user.id),
+		feedOpenRates(locals.db, locals.user.id)
+	]);
 	const feeds = subs.map(({ feed, titleOverride, folder, unread }) => ({
 		id: feed.id,
 		title: feedTitle(feed, titleOverride),
@@ -22,6 +26,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		siteUrl: feed.siteUrl,
 		folder: folder ?? null,
 		unread: Number(unread),
+		// Posts opened vs. cleared unopened in the last 90 days.
+		opens: rates.get(feed.id) ?? { opened: 0, skipped: 0 },
 		lastFetchedAt: feed.lastFetchedAt,
 		lastError: feed.lastError,
 		errorCount: feed.errorCount

@@ -195,7 +195,8 @@
 						<p class="font-ui text-[0.8125rem] break-all text-ink-3">
 							{hostname(feed.siteUrl ?? feed.url)} · {feed.lastFetchedAt
 								? `checked ${relativeDay(feed.lastFetchedAt)}`
-								: 'not checked yet'}
+								: 'not checked yet'}{#if feed.opens.opened + feed.opens.skipped}
+								· opened {feed.opens.opened} of {feed.opens.opened + feed.opens.skipped} in 90 days{/if}
 						</p>
 						{#if feed.lastError}
 							<p class="font-ui text-[0.8125rem] font-bold text-[#9b2c1f]">

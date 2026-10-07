@@ -4,6 +4,7 @@
 	import { highlightSegments } from '$lib/format';
 	import { ignoreShortcut } from '$lib/keys';
 	import { palette } from '$lib/palette.svelte';
+	import { citeLink } from '$lib/signals';
 	import { toast } from '$lib/toast.svelte';
 
 	interface Result {
@@ -82,6 +83,7 @@
 	async function copy(result: Result) {
 		await navigator.clipboard.writeText(result.url);
 		palette.open = false;
+		citeLink(result.id);
 		toast.show({ message: `Copied · ${result.title}` });
 	}
 

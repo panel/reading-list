@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { deserialize, enhance } from '$app/forms';
+	import { enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -7,6 +7,7 @@
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
 	import { ignoreShortcut } from '$lib/keys';
+	import { citeLink, postAction } from '$lib/signals';
 	import { toast, undoQueueChange } from '$lib/toast.svelte';
 
 	let { data } = $props();
@@ -25,18 +26,19 @@
 	let noteSection = $state<HTMLElement>();
 	let busy = $state(false);
 
-	// Reading the post here counts as reading it in its feed, as in the post reader.
+	// Opening the link page records the open, unless it's the page you land on
+	// right after saving it. Reading the post here also counts as opening it in
+	// its feed, as in the post reader.
 	$effect(() => {
+		if (data.notice === 'saved') return;
+		if (!link.openedAt) postAction(action('opened'));
 		const entryId = data.reader?.entryId;
-		if (!entryId || data.reader?.entryRead) return;
-		const body = new FormData();
-		body.set('read', 'true');
-		fetch(`${resolve('/entries/[id]', { id: entryId })}?/read`, {
-			method: 'POST',
-			body,
-			headers: { 'x-sveltekit-action': 'true' }
-		}).then(async (r) => {
-			if (deserialize(await r.text()).type === 'success') invalidateAll();
+		if (!entryId || data.reader?.entryOpened) return;
+		postAction(`${resolve('/entries/[id]', { id: entryId })}?/read`, {
+			read: 'true',
+			opened: 'true'
+		}).then((ok) => {
+			if (ok) invalidateAll();
 		});
 	});
 
@@ -111,6 +113,7 @@
 	async function copyLink() {
 		await navigator.clipboard.writeText(link.url);
 		toast.show({ message: 'Link copied' });
+		citeLink(link.id);
 	}
 
 	function onkeydown(event: KeyboardEvent) {

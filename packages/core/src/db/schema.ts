@@ -64,6 +64,12 @@ export const links = sqliteTable(
 		readAt: timestamp('read_at'),
 		// When it was starred as a reference; orders the Library.
 		starredAt: timestamp('starred_at'),
+		// When it was first opened in the app (its link page), as opposed to read_at,
+		// which Done sets whether or not it was opened. A signal for Slice 12's predictions.
+		openedAt: timestamp('opened_at'),
+		// Copying its URL (palette, Copy link): the clearest sign it's used as a reference.
+		citedAt: timestamp('cited_at'),
+		citeCount: integer('cite_count').notNull().default(0),
 		updatedAt: timestampNow('updated_at')
 	},
 	(t) => [
@@ -170,7 +176,11 @@ export const feedEntries = sqliteTable(
 	]
 );
 
-/** Per-user read state for feed entries. No row = unread. */
+/**
+ * Per-user read state for feed entries. No row = unread. read_at is "no longer
+ * new" (opened, Done, or a new feed's backlog); opened_at is only set when the
+ * post was actually opened in a reader.
+ */
 export const entryState = sqliteTable(
 	'entry_state',
 	{
@@ -181,9 +191,40 @@ export const entryState = sqliteTable(
 			.notNull()
 			.references(() => feedEntries.id, { onDelete: 'cascade' }),
 		readAt: timestamp('read_at'),
-		dismissedAt: timestamp('dismissed_at')
+		dismissedAt: timestamp('dismissed_at'),
+		openedAt: timestamp('opened_at'),
+		citedAt: timestamp('cited_at')
 	},
 	(t) => [primaryKey({ columns: [t.userId, t.entryId] })]
+);
+
+/**
+ * What happened to posts the nightly prune removed, so the record of what was
+ * opened and what was skipped outlives the posts (Slice 12). Only posts that
+ * were opened, cited or dismissed are kept; no FKs, since the post is gone.
+ */
+export const entryHistory = sqliteTable(
+	'entry_history',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		entryId: text('entry_id').notNull(),
+		feedId: text('feed_id').notNull(),
+		url: text('url'),
+		title: text('title'),
+		author: text('author'),
+		publishedAt: timestamp('published_at'),
+		readAt: timestamp('read_at'),
+		openedAt: timestamp('opened_at'),
+		citedAt: timestamp('cited_at'),
+		dismissedAt: timestamp('dismissed_at'),
+		prunedAt: timestampNow('pruned_at')
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.entryId] }),
+		index('entry_history_user_feed').on(t.userId, t.feedId)
+	]
 );
 
 /**
@@ -278,4 +319,5 @@ export type ApiToken = typeof apiTokens.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
 export type Feed = typeof feeds.$inferSelect;
 export type FeedEntry = typeof feedEntries.$inferSelect;
+export type EntryHistory = typeof entryHistory.$inferSelect;
 export type LinkArchive = typeof linkArchives.$inferSelect;

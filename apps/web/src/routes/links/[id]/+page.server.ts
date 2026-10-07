@@ -5,9 +5,11 @@ import { getArchive } from '$lib/server/archive';
 import { entryForLink } from '$lib/server/entries';
 import {
 	appendNote,
+	citeLink,
 	deleteLink,
 	finishLink,
 	getLink,
+	markLinkOpened,
 	parseQueueState,
 	requeueLink,
 	setNote,
@@ -54,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 					date: entry ? (entry.publishedAt ?? entry.createdAt) : null,
 					// The feed post this is, so reading it here marks it read there.
 					entryId: entry?.id ?? null,
-					entryRead: Boolean(entry?.readAt)
+					entryOpened: Boolean(entry?.openedAt)
 				}
 			: null,
 		copy: archive
@@ -75,6 +77,17 @@ const notFound = () => fail(404, { message: 'That link doesn’t exist any more.
  * doesn't redirect: the inbox posts here too and stays where it is.
  */
 export const actions: Actions = {
+	// Posted by the page once it's open (not in load, so hover-preloading doesn't count).
+	opened: async ({ locals, params }) => {
+		await markLinkOpened(locals.db, locals.user.id, params.id);
+		return { opened: true };
+	},
+
+	cite: async ({ locals, params }) => {
+		if (!(await citeLink(locals.db, locals.user.id, params.id))) return notFound();
+		return { cited: true };
+	},
+
 	finish: async ({ locals, params }) => {
 		const undo = await finishLink(locals.db, locals.user.id, params.id);
 		if (!undo) return notFound();

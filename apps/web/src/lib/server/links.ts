@@ -194,6 +194,27 @@ async function changeLink(
 	return stateOf(before);
 }
 
+/**
+ * Opened on its link page (not just saved and shown). Leaves updated_at alone:
+ * looking at a link doesn't change it.
+ */
+export async function markLinkOpened(db: Db, userId: string, id: string) {
+	await db
+		.update(links)
+		.set({ openedAt: sql`coalesce(${links.openedAt}, ${Date.now()})` })
+		.where(ownLink(userId, id));
+}
+
+/** Its URL was copied (palette, Copy link): the clearest sign it's a reference. */
+export async function citeLink(db: Db, userId: string, id: string) {
+	const result = await db
+		.update(links)
+		.set({ citedAt: new Date(), citeCount: sql`${links.citeCount} + 1` })
+		.where(ownLink(userId, id))
+		.returning({ id: links.id });
+	return result.length > 0;
+}
+
 /** Done: leaves the inbox's Shared feed for the archive. */
 export const finishLink = (db: Db, userId: string, id: string) =>
 	changeLink(db, userId, id, { status: 'archived', readAt: new Date() });

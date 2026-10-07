@@ -5,11 +5,13 @@ import {
 	getEntry,
 	keepEntry,
 	linkForEntry,
+	markCited,
+	markOpened,
 	markRead,
 	setDismissed
 } from '$lib/server/entries';
 import { nextInboxItem } from '$lib/server/inbox';
-import { getLink, starLink } from '$lib/server/links';
+import { citeLink, getLink, starLink } from '$lib/server/links';
 import { readingMinutes, sanitizeEntryHtml, withoutOpeningImage } from '$lib/server/sanitize';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -40,11 +42,28 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 export const actions: Actions = {
 	// Posted by the page once it's open, rather than marked in load, so that
 	// hover-preloading a post in the list doesn't count as reading it.
+	// `opened` comes from the page itself (not the Mark read button) and also
+	// records the open, which Slice 12 counts as having read it.
 	read: async ({ locals, params, request }) => {
-		const read = (await request.formData()).get('read') !== 'false';
+		const form = await request.formData();
+		const read = form.get('read') !== 'false';
 		if (!(await getEntry(locals.db, locals.user.id, params.id))) return fail(404);
-		await markRead(locals.db, locals.user.id, params.id, read);
+		if (read && form.get('opened') === 'true') {
+			await markOpened(locals.db, locals.user.id, params.id);
+		} else {
+			await markRead(locals.db, locals.user.id, params.id, read);
+		}
 		return { read };
+	},
+
+	/** Copy link: records the citation on the post, and on its link if it's saved. */
+	cite: async ({ locals, params }) => {
+		const entry = await getEntry(locals.db, locals.user.id, params.id);
+		if (!entry) return fail(404);
+		await markCited(locals.db, locals.user.id, entry.id);
+		const link = await linkForEntry(locals.db, locals.user.id, entry);
+		if (link) await citeLink(locals.db, locals.user.id, link.id);
+		return { cited: true };
 	},
 
 	/** Star: keep as a reference, or unstar. */

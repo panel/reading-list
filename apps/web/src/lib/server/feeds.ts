@@ -75,6 +75,38 @@ export async function listSubscriptions(db: Db, userId: string) {
 		);
 }
 
+/**
+ * How many of each feed's posts the user opened, and how many they cleared
+ * with Done without opening, over the last `days` days (by when they did it).
+ * Includes posts already pruned (entry_history). A backlog marked read when
+ * following a feed counts as neither.
+ */
+export async function feedOpenRates(db: Db, userId: string, days = 90, now = Date.now()) {
+	const since = now - days * 24 * 60 * 60 * 1000;
+	const rows = await db.all<{ feed_id: string; opened: number; skipped: number }>(sql`
+		select feed_id, sum(opened) as opened, sum(skipped) as skipped from (
+			select fe.feed_id,
+				es.opened_at is not null as opened,
+				es.opened_at is null and es.dismissed_at is not null as skipped,
+				coalesce(es.opened_at, es.dismissed_at) as at
+			from entry_state es
+			join feed_entries fe on fe.id = es.entry_id
+			where es.user_id = ${userId}
+			union all
+			select feed_id,
+				opened_at is not null,
+				opened_at is null and dismissed_at is not null,
+				coalesce(opened_at, dismissed_at)
+			from entry_history
+			where user_id = ${userId}
+		)
+		where at >= ${since}
+		group by feed_id`);
+	return new Map(
+		rows.map((r) => [r.feed_id, { opened: Number(r.opened), skipped: Number(r.skipped) }])
+	);
+}
+
 /** Refreshes every feed the user follows, a few at a time. */
 export async function refreshSubscriptions(db: Db, userId: string, fetchFn?: typeof fetch) {
 	const rows = await db

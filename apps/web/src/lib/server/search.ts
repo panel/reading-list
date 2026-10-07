@@ -64,6 +64,9 @@ function toLink(r: Row): Link {
 		queuedAt: date(r.queued_at)!,
 		readAt: date(r.read_at),
 		starredAt: date(r.starred_at),
+		openedAt: date(r.opened_at),
+		citedAt: date(r.cited_at),
+		citeCount: Number(r.cite_count ?? 0),
 		updatedAt: date(r.updated_at)!
 	};
 }

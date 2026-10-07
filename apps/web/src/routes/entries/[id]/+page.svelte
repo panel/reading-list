@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { deserialize, enhance } from '$app/forms';
+	import { enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { tick } from 'svelte';
 	import { ignoreShortcut } from '$lib/keys';
+	import { citeEntry, postAction } from '$lib/signals';
 	import { resolve } from '$app/paths';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { hostname, relativeDay } from '$lib/format';
@@ -54,6 +55,7 @@
 		if (!original) return;
 		await navigator.clipboard.writeText(original);
 		toast.show({ message: 'Link copied' });
+		citeEntry(data.entry.id);
 	}
 
 	function onkeydown(event: KeyboardEvent) {
@@ -66,17 +68,15 @@
 		event.preventDefault();
 	}
 
-	// Opening a post marks it read.
+	// Opening a post marks it read and records the open (even if it was already
+	// marked read without being opened, e.g. by Done or a new feed's backlog).
 	$effect(() => {
-		if (data.entry.readAt) return;
-		const body = new FormData();
-		body.set('read', 'true');
-		fetch(`${resolve('/entries/[id]', { id: data.entry.id })}?/read`, {
-			method: 'POST',
-			body,
-			headers: { 'x-sveltekit-action': 'true' }
-		}).then(async (r) => {
-			if (deserialize(await r.text()).type === 'success') invalidateAll();
+		if (data.entry.openedAt) return;
+		postAction(`${resolve('/entries/[id]', { id: data.entry.id })}?/read`, {
+			read: 'true',
+			opened: 'true'
+		}).then((ok) => {
+			if (ok) invalidateAll();
 		});
 	});
 </script>
