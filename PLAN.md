@@ -426,6 +426,123 @@ pipeline.
     captures inline). The 03:47 prune deletes expired copies.
   - `get_link` (MCP) and `GET /api/links/:id` return the copy's text.
 
+### Slice 12: Prioritize, predict and categorize the inbox
+*"Show me what I'm likely to read first, flag what I'll want to keep, and group it by what it's about."*
+
+Volume is under a dozen new items a day, so this is less about sorting a firehose than
+about two hints per item: **will I read it**, and **will I keep it** (star it into the
+Library), plus a **category** (Work, Music, Local, …) to filter by. It leans on the
+models Cloudflare hosts on Workers AI rather than a frontier API: a *decision model* for
+the per-item judgments and a small *text model* for the occasional job of proposing
+categories.
+
+**Models**
+- **Decision model: Clef-flash** (`@cf/cloudflare/clef-flash`, 9B, open weights,
+  ~40 ms). Like TypeSafe's Jev, whose API it matches, it reads an input state and typed
+  questions (`noul` yes/no, `choice` one of up to 255 options, `score`) and returns a
+  probability for every answer instead of generating text. One call per item answers
+  all three questions. Clef (27B) or Jev (through AI Gateway, `typesafe/jev`) can score
+  the same items later for comparison; the predictions table records which model said
+  what.
+- **Text model** (a Workers AI instruct model, chosen at build time) only for
+  "Suggest categories" in Settings: one on-demand call that writes names and
+  descriptions.
+- It has no memory of its own: personalization is what goes into the state. Each
+  call gets the item (title, source, author, words, the first ~1,000 words of its
+  text) plus the user: recent starred titles, recent opened and skipped titles,
+  open and star rates per feed and per category, and recent category corrections as
+  examples.
+
+**Budget**
+- Workers AI gives 10,000 neurons a day free on any plan; on Workers Free, calls past
+  that fail rather than bill. Estimated use: ~12 items × ~3k tokens ≈ 36k tokens a day,
+  ~300 neurons with Clef-flash (≈3% of the allowance).
+- On top of that, an app-side **daily budget** (default 2,000 neurons) kept in D1:
+  every model call is estimated before it's made and recorded after, and nothing is
+  called once the day's budget is spent. Settings shows the budget and today's use.
+  Background scoring, the Library backfill and Suggest categories all share it.
+- Anything unscored falls back to today's order (newest first, unread first), so a
+  spent budget or a failed call never breaks the inbox.
+
+**12a: Signals that mean what they say**
+- Today `entry_state.read_at` is set by opening a post, but also by Done (dismiss),
+  Mark all read and a new feed's backlog, and `links.read_at` is set by Done whether or
+  not the link was opened. Add **`opened_at`** to both, set only when the reader (post
+  or link page) actually opens the item, through the same POST-from-the-page that
+  marks a post read (so hover preloading doesn't count). Agents marking things read
+  don't count as opening.
+- **Citing:** copying a link's URL (⌘K palette, Copy link) records `cited_at` and a
+  `cite_count` on the link: the strongest "reference" signal there is.
+- **History that survives the prune:** the nightly prune deletes old posts and their
+  read state with them, so skipped posts would vanish and only kept ones remain.
+  Before deleting, copy each user's state for those posts (feed, title, author,
+  published, opened/read/dismissed) into **`entry_history`**.
+- Outcomes per item: *opened*, *skipped* (Done without opening), *starred*, *cited*.
+  Backlog marked read when following a feed isn't an outcome.
+- **Visible right away:** Manage feeds shows each feed's open rate over the last 90
+  days, which is also how we check the data before trusting a model with it.
+- **Status (12a): built.** Migration 0012 adds `opened_at` and `cited_at` to
+  `entry_state`, `opened_at`, `cited_at` and `cite_count` to `links`, and the
+  `entry_history` table. It backfills `opened_at` for posts read so far, leaving out
+  reads that came with Done (same moment) or a backlog (within a minute of the post
+  arriving or the feed being followed); links have no history to backfill. The post
+  reader posts `opened` with its read; the link page posts `?/opened` (not on the page
+  you land on right after saving) and marks its feed post opened too. Mark read, agents
+  and `keepEntry` still only set `read_at`. Copy link (both readers) and the palette post
+  `?/cite` (`$lib/signals.ts`). The prune copies opened, cited or dismissed state into
+  `entry_history` before deleting. Manage feeds shows "opened N of M in 90 days"
+  (`feedOpenRates`). Checked on the local D1: backfill, the actions, the readers and
+  palette in Chromium, and the prune through the fetcher's scheduled handler.
+
+**12b: Budget and Workers AI plumbing**
+- An `ai_usage` table (user, day, neurons, calls) and a helper that refuses a call
+  that would exceed the day's budget; a Settings panel with the budget and today's use.
+- `AI` binding on the fetcher (and the web app, for Suggest categories); in dev and
+  tests the model is a stub.
+
+**12c: Score every item**
+- A `predictions` table: item (post or link), model, `p_open`, `p_keep`, category
+  probabilities, tokens/neurons, created_at. Kept after the item is pruned (no FK), so
+  calibration can be measured against outcomes.
+- The fetcher's cron scores new posts and shared links that have no prediction yet, a
+  few per run, under the budget.
+- The API and MCP expose the scores and category.
+
+**12d: Categories**
+- User-defined categories in Settings: a name and a one-line description that the
+  decision model uses as the rule (e.g. *Local: news and events in …*). Plus an
+  implicit *Other*.
+- **Suggest categories:** samples what's in the app (feed names and folders, ~150
+  recent titles with first lines, starred titles weighted up, existing tags) and asks
+  the text model for 5–12 categories as JSON, each with a description and example
+  titles. Then **Check**: Clef-flash classifies the same sample with the draft, showing
+  how many land in each category, how many end up in Other or unsure, and which pairs
+  it confuses. The user renames, merges, deletes or edits, then **Accepts**. Nothing
+  changes until then. Run again later, it proposes changes (splits, merges,
+  additions) from Other and from corrections instead of starting over.
+- An item can have more than one category: the top one, plus any above ~0.35.
+- Inbox chips for categories next to folders (folders group feeds; categories group
+  posts). Tapping an item's category corrects it; corrections are stored and recent
+  ones go into the state as examples.
+- Optional one-time **Library backfill** (~500 links ≈ 1M tokens ≈ 8k neurons), spread
+  over nights by the budget.
+
+**12e: Use the scores**
+- An inbox order **Likely reads**: `p_open` with a freshness decay, next to Newest.
+  Each row can say why ("you open most posts from this feed", "close to your Library").
+- A **Library candidate** mark on items with a high `p_keep`, and a nudge to star after
+  reading one.
+- Only turned on once a few weeks of predictions line up with what was actually opened
+  and starred (checked from `predictions` against outcomes).
+- **Watch:** position bias (things at the top get opened because they're at the top)
+  and the feedback loop (a feed that sinks is never opened, so it sinks further). Keep
+  Newest one tap away, and keep the freshness term.
+
+**Open choices:** which Workers AI text model for Suggest categories; whether to run
+the Library backfill; whether Clef (27B) earns its ~2.7× cost over Clef-flash.
+**Later:** Cloudflare's RL fine-tuning for Clef, trained on `predictions` against
+outcomes and on category corrections, once it's self-serve.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshot images:** copy starred links' images to R2 so dead images don't break
   the library (Slice 11 keeps text only).
