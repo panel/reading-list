@@ -457,12 +457,13 @@ categories.
 - Workers AI gives 10,000 neurons a day free on any plan; on Workers Free, calls past
   that fail rather than bill. Estimated use: ~12 items × ~3k tokens ≈ 36k tokens a day,
   ~300 neurons with Clef-flash (≈3% of the allowance).
-- On top of that, an app-side **daily budget** (default 2,000 neurons) kept in D1:
-  every model call is estimated before it's made and recorded after, and nothing is
-  called once the day's budget is spent. Settings shows the budget and today's use.
-  Background scoring, the Library backfill and Suggest categories all share it.
+- On top of that, an app-side **daily cap** (default 2,000 neurons, a Worker variable
+  rather than a setting) kept in D1: every model call is estimated before it's made and
+  recorded after, and nothing is called once the day's cap is spent. Background scoring,
+  the Library backfill and Suggest categories all share it. The app doesn't show usage;
+  the Cloudflare dashboard does.
 - Anything unscored falls back to today's order (newest first, unread first), so a
-  spent budget or a failed call never breaks the inbox.
+  spent cap or a failed call never breaks the inbox.
 
 **12a: Signals that mean what they say**
 - Today `entry_state.read_at` is set by opening a post, but also by Done (dismiss),
@@ -494,9 +495,9 @@ categories.
   (`feedOpenRates`). Checked on the local D1: backfill, the actions, the readers and
   palette in Chromium, and the prune through the fetcher's scheduled handler.
 
-**12b: Budget and Workers AI plumbing**
+**12b: Daily cap and Workers AI plumbing**
 - An `ai_usage` table (user, day, neurons, calls) and a helper that refuses a call
-  that would exceed the day's budget; a Settings panel with the budget and today's use.
+  that would exceed the day's cap. No usage UI (see the Cloudflare dashboard).
 - `AI` binding on the fetcher (and the web app, for Suggest categories); in dev and
   tests the model is a stub.
 
@@ -505,7 +506,7 @@ categories.
   probabilities, tokens/neurons, created_at. Kept after the item is pruned (no FK), so
   calibration can be measured against outcomes.
 - The fetcher's cron scores new posts and shared links that have no prediction yet, a
-  few per run, under the budget.
+  few per run, under the daily cap.
 - The API and MCP expose the scores and category.
 
 **12d: Categories**
@@ -525,7 +526,7 @@ categories.
   posts). Tapping an item's category corrects it; corrections are stored and recent
   ones go into the state as examples.
 - Optional one-time **Library backfill** (~500 links ≈ 1M tokens ≈ 8k neurons), spread
-  over nights by the budget.
+  over nights by the daily cap.
 
 **12e: Use the scores**
 - An inbox order **Likely reads**: `p_open` with a freshness decay, next to Newest.
