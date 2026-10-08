@@ -104,15 +104,15 @@
 	const showingAll = $derived(!data.feedId && !data.folder && !data.category);
 	/** Chip links keep the chosen order. */
 	const keepSort = $derived(data.sort === 'likely' ? '&sort=likely' : '');
-	/** This view (same filter) in the other order. */
-	const sortHref = (sort: 'newest' | 'likely') => {
-		const params = new URLSearchParams();
-		if (data.feedId) params.set('feed', data.feedId);
-		if (data.folder) params.set('folder', data.folder);
-		if (data.category) params.set('category', data.category);
-		if (sort === 'likely') params.set('sort', 'likely');
-		const query = params.toString();
-		return `${resolve('/')}${query ? `?${query}` : ''}`;
+	/** The query for this view (same filter) in the given order. */
+	const sortQuery = (sort: 'newest' | 'likely') => {
+		const params = [
+			data.feedId && `feed=${encodeURIComponent(data.feedId)}`,
+			data.folder && `folder=${encodeURIComponent(data.folder)}`,
+			data.category && `category=${encodeURIComponent(data.category)}`,
+			sort === 'likely' && 'sort=likely'
+		].filter(Boolean);
+		return params.length ? `?${params.join('&')}` : '';
 	};
 	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const unreadPosts = $derived(data.inbox.items.filter((i) => i.kind === 'post' && !i.read).length);
@@ -216,7 +216,7 @@
 			<ul class="flex gap-2 py-3">
 				<li>
 					<a
-						href={data.sort === 'likely' ? `${resolve('/')}?sort=likely` : resolve('/')}
+						href="{resolve('/')}{data.sort === 'likely' ? '?sort=likely' : ''}"
 						aria-current={showingAll ? 'page' : undefined}
 						class={chip(showingAll)}>All</a
 					>
@@ -269,7 +269,7 @@
 		<p class="flex justify-end gap-3 pb-1 font-ui text-[0.8125rem]" aria-label="Order">
 			{#each [['newest', 'Newest'], ['likely', 'Likely reads']] as const as [value, label] (value)}
 				<a
-					href={sortHref(value)}
+					href="{resolve('/')}{sortQuery(value)}"
 					aria-current={data.sort === value ? 'true' : undefined}
 					class={data.sort === value
 						? 'font-bold text-ink underline decoration-2 underline-offset-4'
