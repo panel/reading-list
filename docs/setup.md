@@ -21,6 +21,9 @@ The fetcher (`pnpm --filter fetcher dev`) has a Workers AI binding (Slice 12), a
 Workers AI always runs on Cloudflare, even in local dev: run `wrangler login` first.
 Model calls made from local dev spend real neurons and count against the same
 `AI_DAILY_NEURONS` cap as production.
+To run it without a login (and without spending anything), copy `wrangler.jsonc`
+to a scratch config without the `ai` entry and with `"AI_STUB": "1"` in `vars`, and
+start it with `-c`: predictions then come back as a fixed canned answer.
 
 ### Changing the schema
 

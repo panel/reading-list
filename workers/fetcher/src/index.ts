@@ -2,9 +2,13 @@ import { eq } from 'drizzle-orm';
 import {
 	captureArchive,
 	claimArchives,
+	dailyCap,
 	pruneArchives,
 	pruneEntries,
-	refreshFeed
+	refreshFeed,
+	scoreCandidates,
+	scoreItem,
+	type AiRunner
 } from '@reading-list/core';
 import { feeds, getDb, type Db } from '@reading-list/core/db';
 import {
@@ -13,10 +17,53 @@ import {
 	isKick,
 	matchArchive,
 	matchPoll,
+	matchScore,
 	MAX_ARCHIVES_PER_RUN,
+	MAX_SCORES_PER_RUN,
 	pollUrl,
-	PRUNE_CRON
+	PRUNE_CRON,
+	scoreUrl
 } from './poll';
+
+/**
+ * Workers AI, or a canned answer when AI_STUB is set: Workers AI only runs
+ * remotely, so local runs without a Cloudflare login use the stub.
+ */
+function aiRunner(env: Env): AiRunner {
+	if ((env as { AI_STUB?: string }).AI_STUB) {
+		return {
+			run: async () => ({
+				answers: { open: { noul: 0.7 }, keep: { noul: 0.2 } },
+				usage: { input_tokens: 1000 }
+			})
+		};
+	}
+	return { run: (model, input) => env.AI.run(model as never, input as never) };
+}
+
+/**
+ * Picks inbox items that have no prediction yet and scores each in its own
+ * invocation (through SELF): a cold model can take close to a minute.
+ */
+async function dispatchScores(db: Db, env: Env, now: Date) {
+	const candidates = await scoreCandidates(db, MAX_SCORES_PER_RUN, { now: now.getTime() });
+	const outcomes = await Promise.allSettled(
+		candidates.map(async (c): Promise<{ status: string }> => {
+			const response = await env.SELF.fetch(scoreUrl(c.kind, c.userId, c.itemId), {
+				method: 'POST'
+			});
+			if (!response.ok) throw new Error(`score ${c.kind} ${c.itemId}: returned ${response.status}`);
+			return (await response.json()) as { status: string };
+		})
+	);
+	const statuses: Record<string, number> = {};
+	for (const o of outcomes) {
+		const status = o.status === 'fulfilled' ? o.value.status : 'error';
+		statuses[status] = (statuses[status] ?? 0) + 1;
+		if (o.status === 'rejected') console.error(o.reason);
+	}
+	return statuses;
+}
 
 /**
  * Claims pending readable copies and captures each in its own invocation
@@ -61,6 +108,8 @@ export default {
 		// Copies first: they're few, and the feeds' fan-out can use the rest of the budget.
 		const archives = await dispatchArchives(db, env, now);
 		if (archives.archived) console.log(JSON.stringify(archives));
+		const scores = await dispatchScores(db, env, now);
+		if (Object.keys(scores).length) console.log(JSON.stringify({ scores }));
 		const due = await dueFeeds(db, now);
 		if (due.length === 0) return;
 
@@ -89,6 +138,14 @@ export default {
 	async fetch(request, env) {
 		if (isKick(request)) {
 			return Response.json(await dispatchArchives(getDb(env.DB), env, new Date()));
+		}
+		const score = matchScore(request);
+		if (score) {
+			const result = await scoreItem(getDb(env.DB), aiRunner(env), score, {
+				cap: dailyCap(env.AI_DAILY_NEURONS)
+			});
+			if (result.status === 'failed') console.warn(`score ${score.itemId}: ${result.error}`);
+			return Response.json(result);
 		}
 		const linkId = matchArchive(request);
 		if (linkId) {

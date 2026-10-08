@@ -4,6 +4,7 @@ import {
 	index,
 	integer,
 	primaryKey,
+	real,
 	sqliteTable,
 	text,
 	uniqueIndex
@@ -321,6 +322,41 @@ export const aiUsage = sqliteTable('ai_usage', {
 	calls: integer('calls').notNull().default(0)
 });
 
+/**
+ * What a decision model predicted for an item in a user's inbox (Slice 12): the
+ * chance they open it and the chance they star it. One row per item and model,
+ * kept after the item is gone (no FK on the item), so predictions can be checked
+ * against what actually happened. A failed call leaves `error` and is retried a
+ * few times.
+ */
+export const predictions = sqliteTable(
+	'predictions',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemKind: text('item_kind', { enum: ['post', 'link'] }).notNull(),
+		// feed_entries.id for a post, links.id for a link.
+		itemId: text('item_id').notNull(),
+		model: text('model').notNull(),
+		pOpen: real('p_open'),
+		pKeep: real('p_keep'),
+		// The parsed answers as JSON, for questions added later (categories).
+		answers: text('answers'),
+		inputTokens: integer('input_tokens'),
+		neurons: integer('neurons'),
+		error: text('error'),
+		attempts: integer('attempts').notNull().default(0),
+		createdAt: timestampNow('created_at'),
+		updatedAt: timestampNow('updated_at')
+	},
+	(t) => [
+		uniqueIndex('predictions_item').on(t.userId, t.itemKind, t.itemId, t.model),
+		check('predictions_item_kind', sql`${t.itemKind} IN ('post', 'link')`)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
@@ -331,3 +367,4 @@ export type Feed = typeof feeds.$inferSelect;
 export type FeedEntry = typeof feedEntries.$inferSelect;
 export type EntryHistory = typeof entryHistory.$inferSelect;
 export type LinkArchive = typeof linkArchives.$inferSelect;
+export type Prediction = typeof predictions.$inferSelect;

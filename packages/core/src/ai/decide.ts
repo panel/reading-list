@@ -137,7 +137,11 @@ export async function decide(
 	model: DecisionModel,
 	state: string,
 	questions: Record<string, Question>
-): Promise<{ answers: Answers; inputTokens: number | null }> {
+): Promise<{ answers: Answers; inputTokens: number | null; raw: unknown }> {
 	const response = await ai.run(DECISION_MODELS[model].id, toRequest(model, state, questions));
-	return { answers: parseAnswers(response, questions), inputTokens: parseUsage(response) };
+	return {
+		answers: parseAnswers(response, questions),
+		inputTokens: parseUsage(response),
+		raw: response
+	};
 }

@@ -52,3 +52,12 @@ export {
 } from './ai/decide';
 export { DECISION_MODELS, estimateNeurons, estimateTokens, type DecisionModel } from './ai/models';
 export { dailyCap, reserveNeurons, settleNeurons, usageDay } from './ai/usage';
+export { feedOpenRates, loadProfile, type Profile } from './ai/profile';
+export { formatState, QUESTIONS, type ItemForModel } from './ai/state';
+export {
+	scoreCandidates,
+	scoreItem,
+	SCORE_MODEL,
+	type ScoreCandidate,
+	type ScoreResult
+} from './ai/score';

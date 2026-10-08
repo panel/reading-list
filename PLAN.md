@@ -525,7 +525,23 @@ categories.
   calibration can be measured against outcomes.
 - The fetcher's cron scores new posts and shared links that have no prediction yet, a
   few per run, under the daily cap.
-- The API and MCP expose the scores and category.
+- The API and MCP expose the scores and category. *(Later: with 12e, when there's
+  something worth reading from them.)*
+- **Status (12c): built** (open and keep; categories come with 12d). Migration 0014
+  adds `predictions`. Each 15-minute tick the fetcher picks up to 3 candidates
+  (`scoreCandidates`): unread, undismissed posts from the last 7 days and Shared links
+  whose readable copy is in (or that are over an hour old), newest first, that have
+  no Clef-flash prediction or whose failed one is due a retry (an hour × attempts, at
+  most 3). Each goes to `POST /score/:kind/:user/:item` on the fetcher through `SELF`.
+  `scoreItem` builds the state (`formatState`: feeds' open rates, the last 15 starred,
+  opened and skipped titles, then the item with its first 1,000 words), reserves the
+  estimate, calls the model, settles from the reported usage, and upserts the
+  prediction; a failed call gives its reservation back and records the error. Every
+  answer is logged with the raw reply (first 2,000 characters) until the answer format
+  is confirmed. `feedOpenRates` moved to `packages/core` (the web app and the fetcher
+  both use it). Checked end to end on the local D1 with `AI_STUB`: items scored once
+  each, usage settled, a call refused at the cap and retried the next day, a missing
+  item reported as gone.
 
 **12d: Categories**
 - User-defined categories in Settings: a name and a one-line description that the

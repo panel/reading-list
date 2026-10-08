@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { archiveUrl, isKick, KICK_URL, matchArchive, matchPoll, pollUrl, PRUNE_CRON } from './poll';
+import {
+	archiveUrl,
+	isKick,
+	KICK_URL,
+	matchArchive,
+	matchPoll,
+	matchScore,
+	pollUrl,
+	PRUNE_CRON,
+	scoreUrl
+} from './poll';
 
 describe('matchPoll', () => {
 	const id = '01M3KW4JM8VYYV82Z9MC6HVAC0';
@@ -28,6 +38,28 @@ describe('matchArchive and isKick', () => {
 		expect(matchArchive(new Request(KICK_URL, { method: 'POST' }))).toBeNull();
 		expect(isKick(new Request(KICK_URL, { method: 'POST' }))).toBe(true);
 		expect(isKick(new Request(KICK_URL))).toBe(false);
+	});
+});
+
+describe('matchScore', () => {
+	const user = '01M3KW4JM8VYYV82Z9MC6HVAC0';
+	const item = '01M3KW4JM8VYYV82Z9MC6HVAC1';
+
+	it('accepts POST /score/:kind/:user/:item', () => {
+		expect(matchScore(new Request(scoreUrl('post', user, item), { method: 'POST' }))).toEqual({
+			kind: 'post',
+			userId: user,
+			itemId: item
+		});
+	});
+
+	it.each([
+		new Request(scoreUrl('link', user, item)),
+		new Request(`https://fetcher.internal/score/feed/${user}/${item}`, { method: 'POST' }),
+		new Request(`https://fetcher.internal/score/post/${user}`, { method: 'POST' }),
+		new Request(`https://fetcher.internal/score/post/${user}/a-b`, { method: 'POST' })
+	])('rejects %s', (request) => {
+		expect(matchScore(request)).toBeNull();
 	});
 });
 

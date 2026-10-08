@@ -7,7 +7,8 @@ import { feeds, subscriptions, type Db } from '@reading-list/core/db';
  * fewer than this come due in a 15-minute tick.
  */
 export const MAX_FEEDS_PER_TICK = 40;
-// (The cron also dispatches up to MAX_ARCHIVES_PER_RUN readable copies: 45 in all.)
+// (The cron also dispatches up to MAX_ARCHIVES_PER_RUN readable copies and
+// MAX_SCORES_PER_RUN predictions: 48 in all.)
 
 /** Feeds that someone follows and that are due for a check, most overdue first. */
 export function dueFeeds(db: Db, now: Date, limit = MAX_FEEDS_PER_TICK) {
@@ -59,3 +60,21 @@ export function matchArchive(request: Request): string | null {
 
 export const isKick = (request: Request) =>
 	request.method === 'POST' && new URL(request.url).pathname === '/archive/kick';
+
+/** Inbox items scored per cron tick (Slice 12c); each is one subrequest. */
+export const MAX_SCORES_PER_RUN = 3;
+
+const ID = '[0-9A-Za-z]{1,40}';
+const SCORE_PATH = new RegExp(`^/score/(post|link)/(${ID})/(${ID})$`);
+
+export const scoreUrl = (kind: 'post' | 'link', userId: string, itemId: string) =>
+	`https://fetcher.internal/score/${kind}/${userId}/${itemId}`;
+
+/** The item from a POST /score/:kind/:userId/:itemId request, or null. */
+export function matchScore(
+	request: Request
+): { kind: 'post' | 'link'; userId: string; itemId: string } | null {
+	if (request.method !== 'POST') return null;
+	const m = new URL(request.url).pathname.match(SCORE_PATH);
+	return m ? { kind: m[1] as 'post' | 'link', userId: m[2], itemId: m[3] } : null;
+}
