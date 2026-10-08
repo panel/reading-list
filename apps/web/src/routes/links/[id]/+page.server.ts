@@ -2,7 +2,9 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import {
 	categoriesFor,
 	CategoryError,
+	KEEP_CANDIDATE,
 	listCategories,
+	predictionsFor,
 	requestArchive,
 	setItemCategory,
 	stripTags
@@ -35,12 +37,13 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const [next, entry, archive, categories, placed] = await Promise.all([
+	const [next, entry, archive, categories, placed, scores] = await Promise.all([
 		nextInboxItem(locals.db, locals.user.id, link.id),
 		entryForLink(locals.db, locals.user.id, link),
 		getArchive(locals.db, link.id),
 		listCategories(locals.db, locals.user.id),
-		categoriesFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }])
+		categoriesFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }]),
+		predictionsFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }])
 	]);
 	// Read in the app: the saved copy, else the matching post from a feed you follow.
 	const source =
@@ -58,6 +61,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		next,
 		categories: categories.map(({ slug, name }) => ({ slug, name })),
 		category: placed.get(`link:${link.id}`)?.slugs[0] ?? null,
+		candidate: (scores.get(`link:${link.id}`)?.pKeep ?? 0) >= KEEP_CANDIDATE,
 		reader: html
 			? {
 					html,

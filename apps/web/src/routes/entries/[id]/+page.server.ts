@@ -2,7 +2,9 @@ import { error, fail } from '@sveltejs/kit';
 import {
 	categoriesFor,
 	CategoryError,
+	KEEP_CANDIDATE,
 	listCategories,
+	predictionsFor,
 	setItemCategory,
 	stripTags
 } from '@reading-list/core';
@@ -44,6 +46,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			(await categoriesFor(locals.db, locals.user.id, [{ kind: 'post', id: entry.id }])).get(
 				`post:${entry.id}`
 			)?.slugs[0] ?? null,
+		// Not starred yet, and likely to be: nudge to star it.
+		candidate:
+			((await predictionsFor(locals.db, locals.user.id, [{ kind: 'post', id: entry.id }])).get(
+				`post:${entry.id}`
+			)?.pKeep ?? 0) >= KEEP_CANDIDATE,
 		// Starred already, whether from this post or saved by hand with the same URL.
 		link: await linkForEntry(locals.db, locals.user.id, entry)
 			.then((l) => l && getLink(locals.db, locals.user.id, l.id))

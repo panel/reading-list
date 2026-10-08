@@ -4,7 +4,8 @@ import {
 	CategoryError,
 	getCategorySettings,
 	listCategories,
-	saveCategories
+	saveCategories,
+	scorecard
 } from '@reading-list/core';
 import { check, parseDraft, suggest } from '$lib/server/categories';
 import { ApiError, listActivity, undoActivity } from '$lib/server/agent';
@@ -13,13 +14,15 @@ import { PRESETS } from '$lib/tokens';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	const [tokens, activity, categories, categorySettings] = await Promise.all([
+	const [tokens, activity, categories, categorySettings, card] = await Promise.all([
 		listTokens(locals.db, locals.user.id),
 		listActivity(locals.db, locals.user.id, 40),
 		listCategories(locals.db, locals.user.id),
-		getCategorySettings(locals.db, locals.user.id)
+		getCategorySettings(locals.db, locals.user.id),
+		scorecard(locals.db, locals.user.id)
 	]);
 	return {
+		scorecard: card,
 		categories,
 		includeLibrary: categorySettings.includeLibrary,
 		email: locals.user.email,

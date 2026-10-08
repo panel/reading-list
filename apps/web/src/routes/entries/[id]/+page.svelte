@@ -241,6 +241,21 @@
 					</p>
 				{/if}
 			</div>
+		{:else if data.candidate}
+			<div
+				class="mt-6 flex items-center justify-between gap-3 rounded-md border border-accent/40 bg-surface px-4 py-3"
+			>
+				<p class="font-ui text-[0.9375rem] text-ink">
+					<span class="kicker text-[0.6875rem] text-accent">Library candidate</span><br />This looks
+					like one you’d keep.
+				</p>
+				<button
+					type="button"
+					onclick={() => starForm?.requestSubmit()}
+					class="h-10 shrink-0 rounded-md border border-accent px-3.5 font-ui text-sm font-bold text-accent hover:bg-accent hover:text-paper"
+					>☆ Star it</button
+				>
+			</div>
 		{/if}
 
 		<form

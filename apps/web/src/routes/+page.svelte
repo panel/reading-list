@@ -102,6 +102,18 @@
 		showingShared ? 'Shared' : (currentCategory ?? current?.title ?? data.folder ?? null)
 	);
 	const showingAll = $derived(!data.feedId && !data.folder && !data.category);
+	/** Chip links keep the chosen order. */
+	const keepSort = $derived(data.sort === 'likely' ? '&sort=likely' : '');
+	/** This view (same filter) in the other order. */
+	const sortHref = (sort: 'newest' | 'likely') => {
+		const params = new URLSearchParams();
+		if (data.feedId) params.set('feed', data.feedId);
+		if (data.folder) params.set('folder', data.folder);
+		if (data.category) params.set('category', data.category);
+		if (sort === 'likely') params.set('sort', 'likely');
+		const query = params.toString();
+		return `${resolve('/')}${query ? `?${query}` : ''}`;
+	};
 	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const unreadPosts = $derived(data.inbox.items.filter((i) => i.kind === 'post' && !i.read).length);
 	const empty = $derived(data.feeds.length === 0 && data.inbox.shared === 0);
@@ -204,14 +216,14 @@
 			<ul class="flex gap-2 py-3">
 				<li>
 					<a
-						href={resolve('/')}
+						href={data.sort === 'likely' ? `${resolve('/')}?sort=likely` : resolve('/')}
 						aria-current={showingAll ? 'page' : undefined}
 						class={chip(showingAll)}>All</a
 					>
 				</li>
 				<li>
 					<a
-						href="{resolve('/')}?feed={SHARED}"
+						href="{resolve('/')}?feed={SHARED}{keepSort}"
 						aria-current={showingShared ? 'page' : undefined}
 						class={chip(showingShared)}
 						>Shared{#if data.inbox.shared}<span class="font-normal opacity-75"
@@ -222,7 +234,7 @@
 				{#each [...data.categories, ...(data.categories.length ? [{ slug: 'other', name: 'Other' }] : [])] as c (c.slug)}
 					<li>
 						<a
-							href="{resolve('/')}?category={encodeURIComponent(c.slug)}"
+							href="{resolve('/')}?category={encodeURIComponent(c.slug)}{keepSort}"
 							aria-current={data.category === c.slug ? 'page' : undefined}
 							class={chip(data.category === c.slug)}>{c.name}</a
 						>
@@ -231,7 +243,7 @@
 				{#each folders as f (f.name)}
 					<li>
 						<a
-							href="{resolve('/')}?folder={encodeURIComponent(f.name)}"
+							href="{resolve('/')}?folder={encodeURIComponent(f.name)}{keepSort}"
 							aria-current={data.folder === f.name ? 'page' : undefined}
 							class={chip(data.folder === f.name, 'accent')}
 							>{f.name}{#if f.unread}<span class="font-normal opacity-75">{f.unread}</span>{/if}</a
@@ -241,7 +253,7 @@
 				{#each data.feeds.filter((f) => !data.folder || f.folder === data.folder) as feed (feed.id)}
 					<li>
 						<a
-							href="{resolve('/')}?feed={encodeURIComponent(feed.id)}"
+							href="{resolve('/')}?feed={encodeURIComponent(feed.id)}{keepSort}"
 							aria-current={data.feedId === feed.id ? 'page' : undefined}
 							class={chip(data.feedId === feed.id)}
 							>{feed.title}{#if feed.unread}<span class="font-normal opacity-75">{feed.unread}</span
@@ -251,6 +263,20 @@
 				{/each}
 			</ul>
 		</nav>
+	{/if}
+
+	{#if !empty && data.inbox.items.length}
+		<p class="flex justify-end gap-3 pb-1 font-ui text-[0.8125rem]" aria-label="Order">
+			{#each [['newest', 'Newest'], ['likely', 'Likely reads']] as const as [value, label] (value)}
+				<a
+					href={sortHref(value)}
+					aria-current={data.sort === value ? 'true' : undefined}
+					class={data.sort === value
+						? 'font-bold text-ink underline decoration-2 underline-offset-4'
+						: 'text-ink-3 hover:text-ink'}>{label}</a
+				>
+			{/each}
+		</p>
 	{/if}
 
 	{#if empty}
@@ -314,6 +340,10 @@
 									{#if item.kind === 'shared'}<span class="text-ink-2">Shared ·</span>{/if}
 									{item.source} · {relativeDay(item.date)}
 									{#if item.starred}<span class="text-ink-2">· ★</span>{/if}
+									{#if data.sort === 'likely' && item.pOpen !== null && !item.read}<span
+											class="text-ink-2">· {Math.round(item.pOpen * 100)}% likely</span
+										>{/if}
+									{#if item.candidate}<span class="text-ink-2">· Library candidate</span>{/if}
 									{#if item.categories.length && !data.category}<span class="text-ink-3"
 											>· {item.categories.map((c) => categoryName.get(c) ?? c).join(', ')}</span
 										>{/if}

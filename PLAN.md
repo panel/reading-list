@@ -606,6 +606,20 @@ categories.
 - **Watch:** position bias (things at the top get opened because they're at the top)
   and the feedback loop (a feed that sinks is never opened, so it sinks further). Keep
   Newest one tap away, and keep the freshness term.
+- **Status (12e): built**, turned on now rather than after a fixed wait, with a
+  scorecard to judge it by. `packages/core/src/ai/predictions.ts`:
+  - **Likely reads** (`?sort=likely`, a Newest / Likely reads switch above the inbox;
+    chips keep the order): unread items ranked by `p_open × 0.5^(age in days / 3)`,
+    unscored ones as 0.5; read posts stay below. Rows show "N% likely". Newest stays
+    the default.
+  - **Library candidate**: an unstarred item with `p_keep ≥ 0.5` is marked on its row,
+    and its reader (post or link) offers "☆ Star it".
+  - **Scorecard** (Settings → Predictions): every scored item whose fate is known
+    (opened, or cleared unopened; posts via entry_state or entry_history), grouped by
+    predicted chance in fifths, with how many were actually opened, and starred. Well
+    calibrated means each row's actual rate sits inside its range.
+  - Reasons per row ("you open most posts from this feed") are left for later.
+  Checked on the local D1 in Chromium with seeded scores and outcomes.
 
 **Open choices:** which Workers AI text model for Suggest categories; whether to run
 the Library backfill; whether Clef (27B) earns its ~2.7× cost over Clef-flash.

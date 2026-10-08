@@ -8,8 +8,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const feedId = url.searchParams.get('feed') ?? undefined;
 	const folder = url.searchParams.get('folder') ?? undefined;
 	const category = url.searchParams.get('category') ?? undefined;
+	const sort = url.searchParams.get('sort') === 'likely' ? 'likely' : 'newest';
 	const [inbox, subs, categories] = await Promise.all([
-		getInbox(locals.db, locals.user.id, { feedId, folder, category }),
+		getInbox(locals.db, locals.user.id, { feedId, folder, category }, 60, sort),
 		listSubscriptions(locals.db, locals.user.id),
 		listCategories(locals.db, locals.user.id)
 	]);
@@ -18,6 +19,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		feedId: feedId ?? null,
 		folder: folder ?? null,
 		category: category ?? null,
+		sort,
 		categories: categories.map(({ slug, name }) => ({ slug, name })),
 		feeds: subs.map(({ feed, titleOverride, folder: feedFolder, unread }) => ({
 			id: feed.id,

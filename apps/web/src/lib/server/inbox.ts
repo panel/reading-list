@@ -1,7 +1,7 @@
 import { and, count, desc, eq, ne } from 'drizzle-orm';
 import { links, type Db, type Link } from '@reading-list/core/db';
 import { displayTitle, siteLabel } from '$lib/format';
-import { categoriesFor } from '@reading-list/core';
+import { categoriesFor, KEEP_CANDIDATE, likelyScore, predictionsFor } from '@reading-list/core';
 import {
 	getInbox as getPosts,
 	inCategory,
@@ -32,6 +32,11 @@ export type InboxItem = {
 	starred: boolean;
 	/** Category slugs: the first is the main one. Empty until it's been sorted. */
 	categories: string[];
+	/** Predicted chances of opening it and of starring it (Slice 12), once scored. */
+	pOpen: number | null;
+	pKeep: number | null;
+	/** Likely to be starred: shown as a Library candidate. */
+	candidate: boolean;
 };
 
 /**
@@ -39,6 +44,9 @@ export type InboxItem = {
  * posts; a category shows posts and shared links in it.
  */
 export type InboxFilter = { feedId?: string; folder?: string; category?: string };
+
+/** Newest first, or "Likely reads": by the chance of opening, favouring newer items. */
+export type InboxSort = 'newest' | 'likely';
 
 export const SHARED = 'shared';
 
@@ -57,7 +65,10 @@ function postItem(entry: InboxEntry): InboxItem {
 		date: entry.publishedAt ?? entry.createdAt,
 		read: Boolean(entry.readAt),
 		starred: Boolean(entry.linkIsReference),
-		categories: []
+		categories: [],
+		pOpen: null,
+		pKeep: null,
+		candidate: false
 	};
 }
 
@@ -74,7 +85,10 @@ function sharedItem(link: Link): InboxItem {
 		date: link.queuedAt,
 		read: false,
 		starred: link.isReference,
-		categories: []
+		categories: [],
+		pOpen: null,
+		pKeep: null,
+		candidate: false
 	};
 }
 
@@ -86,7 +100,8 @@ export async function getInbox(
 	db: Db,
 	userId: string,
 	{ feedId, folder, category }: InboxFilter = {},
-	limit = 60
+	limit = 60,
+	sort: InboxSort = 'newest'
 ) {
 	const wantShared = !folder && (!feedId || feedId === SHARED);
 	const wantPosts = feedId !== SHARED;
@@ -113,14 +128,26 @@ export async function getInbox(
 		...[...postItems.filter((p) => !p.read), ...shared.map(sharedItem)].sort(newestFirst),
 		...postItems.filter((p) => p.read)
 	].slice(0, limit);
-	const placed = await categoriesFor(
-		db,
-		userId,
-		items.map((i) => ({ kind: i.kind === 'post' ? 'post' : 'link', id: i.id }))
-	);
-	for (const item of items) {
-		item.categories =
-			placed.get(`${item.kind === 'post' ? 'post' : 'link'}:${item.id}`)?.slugs ?? [];
+	const refs = items.map((i) => ({
+		kind: i.kind === 'post' ? ('post' as const) : ('link' as const),
+		id: i.id
+	}));
+	const [placed, scores] = await Promise.all([
+		categoriesFor(db, userId, refs),
+		predictionsFor(db, userId, refs)
+	]);
+	items.forEach((item, i) => {
+		const key = `${refs[i].kind}:${item.id}`;
+		item.categories = placed.get(key)?.slugs ?? [];
+		item.pOpen = scores.get(key)?.pOpen ?? null;
+		item.pKeep = scores.get(key)?.pKeep ?? null;
+		item.candidate = !item.starred && (item.pKeep ?? 0) >= KEEP_CANDIDATE;
+	});
+	if (sort === 'likely') {
+		// Unread first as always; within them, the likeliest reads (newer ones favoured).
+		const now = Date.now();
+		const rank = (i: InboxItem) => (i.read ? -1 : likelyScore(i.pOpen, i.date, now));
+		items.sort((a, b) => rank(b) - rank(a));
 	}
 	return {
 		items,

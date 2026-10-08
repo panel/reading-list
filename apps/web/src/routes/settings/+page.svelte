@@ -3,7 +3,7 @@
 	import { enhance } from '$app/forms';
 	import { untrack } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import type { CheckReport, Suggestion } from '@reading-list/core';
+	import type { Bucket, CheckReport, Suggestion } from '@reading-list/core';
 	import { relativeDay } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 	import { PRESETS, SCOPES, type Scope } from '$lib/tokens';
@@ -69,6 +69,9 @@
 		draft = saved();
 		toast.show({ message: 'Categories saved. The inbox is re-sorted over the next few minutes.' });
 	});
+
+	const pct = (n: number) => `${Math.round(n * 100)}%`;
+	const filled = (buckets: Bucket[]) => buckets.filter((b) => b.items > 0);
 
 	const scopeLabels = (scopes: string) =>
 		scopes
@@ -222,6 +225,49 @@
 					</p>
 				{/each}
 			</div>
+		{/if}
+	</section>
+
+	<section class="flex flex-col gap-3" aria-labelledby="predictions-heading">
+		<div class="border-b-2 border-ink pb-3">
+			<h2 id="predictions-heading" class="kicker text-ink-2">Predictions</h2>
+		</div>
+		<p class="text-[1.0625rem] leading-[1.55]">
+			Each new item gets a predicted chance that you’ll open it and that you’ll star it. Here’s how
+			those have matched what you did. If they’re right, the items it gave 80% open about 8 in 10
+			times.
+		</p>
+		{#if data.scorecard.decided === 0}
+			<p class="font-ui text-[0.9375rem] text-ink-3">
+				Nothing to compare yet: predictions count once you open an item or clear it.
+			</p>
+		{:else}
+			<p class="font-ui text-[0.8125rem] text-ink-3">
+				{data.scorecard.decided} items you’ve opened or cleared since predictions began.
+			</p>
+			{#each [['Will you open it?', 'opened', data.scorecard.open], ['Will you star it?', 'starred', data.scorecard.keep]] as const as [title, verb, buckets] (title)}
+				<table class="w-full font-ui text-[0.9375rem]">
+					<caption class="pb-1.5 text-left kicker text-accent">{title}</caption>
+					<thead>
+						<tr class="text-left text-[0.8125rem] text-ink-3">
+							<th class="py-1 font-normal">Predicted</th>
+							<th class="py-1 text-right font-normal">Items</th>
+							<th class="py-1 text-right font-normal">Actually {verb}</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each filled(buckets) as b (b.from)}
+							<tr class="border-t border-rule">
+								<td class="py-1.5">{pct(b.from)}–{pct(b.to)}</td>
+								<td class="py-1.5 text-right tabular-nums">{b.items}</td>
+								<td class="py-1.5 text-right tabular-nums"
+									>{b.happened} <span class="text-ink-3">({pct(b.happened / b.items)})</span></td
+								>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/each}
 		{/if}
 	</section>
 

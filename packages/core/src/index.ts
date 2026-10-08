@@ -86,3 +86,13 @@ export {
 } from './ai/categories';
 export { DEFAULT_TEXT_MODEL, generateJson, textNeurons } from './ai/text';
 export { stubAi } from './ai/stub';
+export {
+	HALF_LIFE_DAYS,
+	KEEP_CANDIDATE,
+	likelyScore,
+	predictionsFor,
+	scorecard,
+	type Bucket,
+	type Scorecard,
+	type Scores
+} from './ai/predictions';
