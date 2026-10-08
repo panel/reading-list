@@ -38,3 +38,14 @@ export {
 	MIN_WORDS,
 	type CaptureResult
 } from './archive';
+export {
+	decide,
+	estimateCall,
+	parseAnswers,
+	type AiRunner,
+	type Answer,
+	type Answers,
+	type Question
+} from './ai/decide';
+export { DECISION_MODELS, estimateNeurons, estimateTokens, type DecisionModel } from './ai/models';
+export { dailyCap, reserveNeurons, usageDay } from './ai/usage';

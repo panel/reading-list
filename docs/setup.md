@@ -17,6 +17,11 @@ in for the signed-in user. It is ignored in production builds.
 Other commands (from the repo root): `pnpm lint`, `pnpm check`, `pnpm test`,
 `pnpm build`, `pnpm format`.
 
+The fetcher (`pnpm --filter fetcher dev`) has a Workers AI binding (Slice 12), and
+Workers AI always runs on Cloudflare, even in local dev: run `wrangler login` first.
+Model calls made from local dev spend real neurons and count against the same
+`AI_DAILY_NEURONS` cap as production.
+
 ### Changing the schema
 
 1. Edit `packages/core/src/db/schema.ts`.
@@ -117,6 +122,10 @@ app refuses every request with a 500.
    The fetcher also saves readable copies of links (Slice 11). The web app
    reaches it through a `FETCHER` service binding, so deploy the fetcher
    before the web app whenever both change.
+
+   Since Slice 12 the fetcher also binds Workers AI (`AI`), with the app's own
+   daily cap in the `AI_DAILY_NEURONS` variable (default 2,000 of the 10,000 free
+   neurons a day). Usage shows under AI → Workers AI in the dashboard.
 
 6. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
    API Tokens → Create Token → "Edit Cloudflare Workers" template, then add

@@ -311,6 +311,16 @@ export const linkArchives = sqliteTable(
 	]
 );
 
+/**
+ * Neurons spent on Workers AI per UTC day, against the app's own daily cap
+ * (AI_DAILY_NEURONS). Account-wide, like Workers AI's free allowance.
+ */
+export const aiUsage = sqliteTable('ai_usage', {
+	day: text('day').primaryKey(),
+	neurons: integer('neurons').notNull().default(0),
+	calls: integer('calls').notNull().default(0)
+});
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;

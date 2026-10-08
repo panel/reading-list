@@ -500,6 +500,18 @@ categories.
   that would exceed the day's cap. No usage UI (see the Cloudflare dashboard).
 - `AI` binding on the fetcher (and the web app, for Suggest categories); in dev and
   tests the model is a stub.
+- **Status (12b): built.** `packages/core/src/ai`: `decide()` sends `{ model, state,
+  questions }` to `env.AI.run('@cf/cloudflare/clef-flash', …)`, questions keyed by id
+  with `type` and `instructions`, a choice's options in `criteria`. `parseAnswers`
+  accepts the response shapes sources disagree on (a yes/no as a bare number or
+  `{ noul }`; choice probabilities nested or not; a REST `result` wrapper) and drops
+  what it can't read. **Verify against a live response in 12c.** Costs are estimated
+  from the request size (~4 characters a token) at the published neuron rates;
+  `reserveNeurons` adds them to today's `ai_usage` row in one conditional upsert and
+  refuses past the cap (checked on the local D1). Migration 0013 adds `ai_usage`. The
+  fetcher binds `AI` with `AI_DAILY_NEURONS = 2000`; nothing calls it yet. Workers AI
+  bindings are always remote, so `wrangler dev` for the fetcher now needs
+  `wrangler login` (docs/setup.md).
 
 **12c: Score every item**
 - A `predictions` table: item (post or link), model, `p_open`, `p_keep`, category
