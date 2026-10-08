@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
+	import { untrack } from 'svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { CheckReport, Suggestion } from '@reading-list/core';
 	import { relativeDay } from '$lib/format';
+	import { toast } from '$lib/toast.svelte';
 	import { PRESETS, SCOPES, type Scope } from '$lib/tokens';
 
 	let { data, form } = $props();
@@ -13,6 +17,58 @@
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}
+
+	// Categories: a draft edited here, checked and saved through form actions.
+	type Row = { slug?: string; name: string; description: string; examples?: string[] };
+	// Start from what's saved (again after each save); edits and suggestions override it.
+	const saved = () => data.categories.map((c): Row => ({ ...c }));
+	let draft = $state<Row[]>(untrack(saved));
+	let includeLibrary = $state(untrack(() => data.includeLibrary));
+	let report = $state<CheckReport | null>(null);
+	let categoryError = $state<string | null>(null);
+	let busy = $state<'suggest' | 'check' | 'save' | null>(null);
+	const draftJson = $derived(
+		JSON.stringify(draft.map(({ slug, name, description }) => ({ slug, name, description })))
+	);
+
+	/** Runs a category action without reloading the page, so the draft stays as it is. */
+	const categoryAction =
+		(
+			kind: 'suggest' | 'check' | 'save',
+			done: (data: Record<string, unknown>) => void
+		): SubmitFunction =>
+		() => {
+			busy = kind;
+			categoryError = null;
+			return async ({ result, update }) => {
+				busy = null;
+				if (result.type === 'success') {
+					// After a save, reload first so the draft resets to what was saved.
+					if (kind === 'save') await update({ reset: false });
+					done(result.data ?? {});
+				} else if (result.type === 'failure') {
+					categoryError = String(result.data?.categoryError ?? 'Something went wrong');
+				} else {
+					await update();
+				}
+			};
+		};
+
+	const onSuggest = categoryAction('suggest', (d) => {
+		// Keep a category's slug when a suggestion keeps its name, so corrections carry over.
+		const slugs = new Map(data.categories.map((c) => [c.name.toLowerCase(), c.slug]));
+		draft = (d.suggestions as Suggestion[]).map((s) => ({
+			...s,
+			slug: slugs.get(s.name.toLowerCase())
+		}));
+		report = null;
+	});
+	const onCheck = categoryAction('check', (d) => (report = d.report as CheckReport));
+	const onSave = categoryAction('save', () => {
+		report = null;
+		draft = saved();
+		toast.show({ message: 'Categories saved. The inbox is re-sorted over the next few minutes.' });
+	});
 
 	const scopeLabels = (scopes: string) =>
 		scopes
@@ -30,6 +86,144 @@
 		<h1 class="headline text-[2.1rem] leading-[1.05] lg:text-5xl">Settings</h1>
 		<p class="mt-2 font-ui text-[0.9375rem] text-ink-2">Signed in as {data.email}</p>
 	</header>
+
+	<section class="flex flex-col gap-4" aria-labelledby="categories-heading">
+		<div class="border-b-2 border-ink pb-3">
+			<h2 id="categories-heading" class="kicker text-ink-2">Categories</h2>
+		</div>
+		<p class="text-[1.0625rem] leading-[1.55]">
+			Sort the inbox by what things are about. Each category’s description is the rule a model uses
+			to place new posts and links; anything that fits none of them goes in Other.
+		</p>
+
+		<form method="POST" action="?/suggestCategories" use:enhance={onSuggest}>
+			<button
+				disabled={busy !== null}
+				class="h-11 rounded-md border border-ink px-4.5 font-ui text-[0.9375rem] font-bold text-ink hover:bg-ink hover:text-paper disabled:opacity-60"
+			>
+				{busy === 'suggest'
+					? 'Suggesting… (can take a minute)'
+					: data.categories.length
+						? 'Suggest changes'
+						: 'Suggest categories'}
+			</button>
+			<p class="mt-1.5 font-ui text-[0.8125rem] text-ink-3">
+				Drafts categories from your feeds, recent posts and Library. Nothing changes until you save.
+			</p>
+		</form>
+
+		{#if categoryError}
+			<p role="alert" class="font-ui text-[0.9375rem] font-bold text-[#9b2c1f]">{categoryError}</p>
+		{/if}
+
+		{#if draft.length}
+			<ol class="flex flex-col gap-2">
+				{#each draft as row, i (i)}
+					<li class="flex flex-col gap-2 rounded-md border border-rule bg-surface p-3">
+						<div class="flex gap-2">
+							<input
+								aria-label="Category name"
+								bind:value={row.name}
+								maxlength="40"
+								placeholder="Name"
+								class="h-10 min-w-0 flex-1 rounded-md border border-rule-strong bg-paper px-3 font-ui font-bold text-ink focus:border-accent focus:outline-none"
+							/>
+							<button
+								type="button"
+								onclick={() => draft.splice(i, 1)}
+								class="h-10 shrink-0 rounded-md px-3 font-ui text-sm text-ink-3 hover:text-ink"
+								>Remove</button
+							>
+						</div>
+						<textarea
+							aria-label="What belongs in {row.name || 'this category'}"
+							bind:value={row.description}
+							maxlength="300"
+							rows="2"
+							placeholder="What belongs here, as a rule (e.g. news and events in Cleveland)"
+							class="rounded-md border border-rule-strong bg-paper px-3 py-2 font-ui text-[0.9375rem] text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none"
+						></textarea>
+						{#if row.examples?.length}
+							<p class="font-ui text-[0.8125rem] text-ink-3">e.g. {row.examples.join(' · ')}</p>
+						{/if}
+					</li>
+				{/each}
+			</ol>
+		{/if}
+		<div>
+			<button
+				type="button"
+				onclick={() => draft.push({ name: '', description: '' })}
+				class="font-ui text-[0.9375rem] font-bold text-accent hover:text-accent-strong"
+				>+ Add a category</button
+			>
+		</div>
+
+		<label class="flex cursor-pointer items-start gap-3 font-ui text-[0.9375rem] text-ink">
+			<input type="checkbox" bind:checked={includeLibrary} class="mt-1 accent-accent" />
+			<span>
+				Also sort my Library (starred links)
+				<span class="block text-[0.8125rem] text-ink-3"
+					>A one-time job, spread over a few hours by the daily AI budget.</span
+				>
+			</span>
+		</label>
+
+		<div class="flex flex-wrap gap-2">
+			<form method="POST" action="?/checkCategories" use:enhance={onCheck}>
+				<input type="hidden" name="draft" value={draftJson} />
+				<button
+					disabled={busy !== null || !draft.length}
+					class="h-11 rounded-md border border-rule-strong px-4.5 font-ui text-[0.9375rem] font-bold text-ink hover:border-ink disabled:opacity-60"
+					>{busy === 'check' ? 'Checking…' : 'Check'}</button
+				>
+			</form>
+			<form method="POST" action="?/saveCategories" use:enhance={onSave}>
+				<input type="hidden" name="draft" value={draftJson} />
+				<input type="hidden" name="includeLibrary" value={includeLibrary ? 'on' : ''} />
+				<button
+					disabled={busy !== null}
+					class="h-11 rounded-md bg-ink px-4.5 font-ui text-[0.9375rem] font-bold text-paper hover:bg-accent-strong disabled:opacity-60"
+					>{busy === 'save' ? 'Saving…' : 'Save categories'}</button
+				>
+			</form>
+		</div>
+
+		{#if report}
+			<div role="status" class="flex flex-col gap-2.5 rounded-md border border-rule bg-surface p-4">
+				<p class="kicker text-accent">Check · {report.sampled} recent posts and starred links</p>
+				<ul class="flex flex-col gap-1.5 font-ui text-[0.9375rem]">
+					{#each report.categories as c (c.slug)}
+						<li>
+							<span class="font-bold text-ink">{c.name}</span>
+							<span class="text-ink-2">· {c.count}</span>
+							{#if c.examples.length}<span class="block text-[0.8125rem] text-ink-3"
+									>{c.examples.join(' · ')}</span
+								>{/if}
+						</li>
+					{/each}
+					<li>
+						<span class="font-bold text-ink">Other</span>
+						<span class="text-ink-2">· {report.other.count}</span>
+						{#if report.other.examples.length}<span class="block text-[0.8125rem] text-ink-3"
+								>{report.other.examples.join(' · ')}</span
+							>{/if}
+					</li>
+				</ul>
+				{#if report.unsure}
+					<p class="font-ui text-[0.8125rem] text-ink-2">
+						Unsure about {report.unsure} of {report.sampled}: sharper descriptions help.
+					</p>
+				{/if}
+				{#each report.confused as pair (pair.a + pair.b)}
+					<p class="font-ui text-[0.8125rem] text-ink-2">
+						Often mixed up: {pair.a} and {pair.b} ({pair.count}). Merge them, or say what separates
+						them.
+					</p>
+				{/each}
+			</div>
+		{/if}
+	</section>
 
 	<section class="flex flex-col gap-3" aria-labelledby="data-heading">
 		<div class="border-b-2 border-ink pb-3">

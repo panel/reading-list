@@ -61,3 +61,28 @@ export {
 	type ScoreCandidate,
 	type ScoreResult
 } from './ai/score';
+export {
+	BudgetError,
+	categoriesFor,
+	categorizeCandidates,
+	categorizeForUser,
+	CategoryError,
+	checkCategories,
+	getCategorySettings,
+	listCategories,
+	normalizeDraft,
+	OTHER,
+	placement,
+	saveCategories,
+	setItemCategory,
+	slugify,
+	suggestCategories,
+	summarizeCheck,
+	usersWithCategories,
+	type CategoryDef,
+	type CategoryDraft,
+	type CheckReport,
+	type Suggestion
+} from './ai/categories';
+export { DEFAULT_TEXT_MODEL, generateJson, textNeurons } from './ai/text';
+export { stubAi } from './ai/stub';

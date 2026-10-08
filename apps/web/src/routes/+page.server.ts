@@ -1,3 +1,4 @@
+import { listCategories } from '@reading-list/core';
 import { markAllRead } from '$lib/server/entries';
 import { feedTitle, listSubscriptions, refreshSubscriptions } from '$lib/server/feeds';
 import { getInbox } from '$lib/server/inbox';
@@ -6,14 +7,18 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const feedId = url.searchParams.get('feed') ?? undefined;
 	const folder = url.searchParams.get('folder') ?? undefined;
-	const [inbox, subs] = await Promise.all([
-		getInbox(locals.db, locals.user.id, { feedId, folder }),
-		listSubscriptions(locals.db, locals.user.id)
+	const category = url.searchParams.get('category') ?? undefined;
+	const [inbox, subs, categories] = await Promise.all([
+		getInbox(locals.db, locals.user.id, { feedId, folder, category }),
+		listSubscriptions(locals.db, locals.user.id),
+		listCategories(locals.db, locals.user.id)
 	]);
 	return {
 		inbox,
 		feedId: feedId ?? null,
 		folder: folder ?? null,
+		category: category ?? null,
+		categories: categories.map(({ slug, name }) => ({ slug, name })),
 		feeds: subs.map(({ feed, titleOverride, folder: feedFolder, unread }) => ({
 			id: feed.id,
 			title: feedTitle(feed, titleOverride),

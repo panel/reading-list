@@ -3,6 +3,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import Favicon from '$lib/components/Favicon.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
@@ -270,6 +271,16 @@
 	{/if}
 
 	{@render copyStatus()}
+
+	{#if data.categories.length}
+		<div class="font-ui text-sm">
+			<CategoryPicker
+				categories={data.categories}
+				current={data.category}
+				action={action('category')}
+			/>
+		</div>
+	{/if}
 
 	<section
 		bind:this={noteSection}

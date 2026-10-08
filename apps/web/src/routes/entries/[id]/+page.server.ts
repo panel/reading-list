@@ -1,5 +1,11 @@
 import { error, fail } from '@sveltejs/kit';
-import { stripTags } from '@reading-list/core';
+import {
+	categoriesFor,
+	CategoryError,
+	listCategories,
+	setItemCategory,
+	stripTags
+} from '@reading-list/core';
 import {
 	EntryHasNoUrlError,
 	getEntry,
@@ -30,6 +36,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		html,
 		minutes: readingMinutes(stripTags(entry.content ?? entry.summary ?? '')),
 		next: await nextInboxItem(locals.db, locals.user.id, entry.id),
+		categories: (await listCategories(locals.db, locals.user.id)).map(({ slug, name }) => ({
+			slug,
+			name
+		})),
+		category:
+			(await categoriesFor(locals.db, locals.user.id, [{ kind: 'post', id: entry.id }])).get(
+				`post:${entry.id}`
+			)?.slugs[0] ?? null,
 		// Starred already, whether from this post or saved by hand with the same URL.
 		link: await linkForEntry(locals.db, locals.user.id, entry)
 			.then((l) => l && getLink(locals.db, locals.user.id, l.id))
@@ -64,6 +78,19 @@ export const actions: Actions = {
 		const link = await linkForEntry(locals.db, locals.user.id, entry);
 		if (link) await citeLink(locals.db, locals.user.id, link.id);
 		return { cited: true };
+	},
+
+	/** A correction: this post belongs in that category. */
+	category: async ({ locals, params, request }) => {
+		const slug = String((await request.formData()).get('category') ?? '');
+		if (!(await getEntry(locals.db, locals.user.id, params.id))) return fail(404);
+		try {
+			await setItemCategory(locals.db, locals.user.id, 'post', params.id, slug);
+		} catch (err) {
+			if (err instanceof CategoryError) return fail(400, { message: err.message });
+			throw err;
+		}
+		return { category: slug };
 	},
 
 	/** Star: keep as a reference, or unstar. */

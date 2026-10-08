@@ -1,5 +1,12 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { requestArchive, stripTags } from '@reading-list/core';
+import {
+	categoriesFor,
+	CategoryError,
+	listCategories,
+	requestArchive,
+	setItemCategory,
+	stripTags
+} from '@reading-list/core';
 import { siteLabel } from '$lib/format';
 import { getArchive } from '$lib/server/archive';
 import { entryForLink } from '$lib/server/entries';
@@ -28,10 +35,12 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const [next, entry, archive] = await Promise.all([
+	const [next, entry, archive, categories, placed] = await Promise.all([
 		nextInboxItem(locals.db, locals.user.id, link.id),
 		entryForLink(locals.db, locals.user.id, link),
-		getArchive(locals.db, link.id)
+		getArchive(locals.db, link.id),
+		listCategories(locals.db, locals.user.id),
+		categoriesFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }])
 	]);
 	// Read in the app: the saved copy, else the matching post from a feed you follow.
 	const source =
@@ -47,6 +56,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		link,
 		notice,
 		next,
+		categories: categories.map(({ slug, name }) => ({ slug, name })),
+		category: placed.get(`link:${link.id}`)?.slugs[0] ?? null,
 		reader: html
 			? {
 					html,
@@ -81,6 +92,19 @@ export const actions: Actions = {
 	opened: async ({ locals, params }) => {
 		await markLinkOpened(locals.db, locals.user.id, params.id);
 		return { opened: true };
+	},
+
+	/** A correction: this link belongs in that category. */
+	category: async ({ locals, params, request }) => {
+		const slug = String((await request.formData()).get('category') ?? '');
+		if (!(await getLink(locals.db, locals.user.id, params.id))) return notFound();
+		try {
+			await setItemCategory(locals.db, locals.user.id, 'link', params.id, slug);
+		} catch (err) {
+			if (err instanceof CategoryError) return fail(400, { message: err.message });
+			throw err;
+		}
+		return { category: slug };
 	},
 
 	cite: async ({ locals, params }) => {

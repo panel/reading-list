@@ -7,8 +7,8 @@ import { feeds, subscriptions, type Db } from '@reading-list/core/db';
  * fewer than this come due in a 15-minute tick.
  */
 export const MAX_FEEDS_PER_TICK = 40;
-// (The cron also dispatches up to MAX_ARCHIVES_PER_RUN readable copies and
-// MAX_SCORES_PER_RUN predictions: 48 in all.)
+// (The cron also dispatches up to MAX_ARCHIVES_PER_RUN readable copies,
+// MAX_SCORES_PER_RUN predictions and MAX_CATEGORIZE_PER_RUN category runs: 49 in all.)
 
 /** Feeds that someone follows and that are due for a check, most overdue first. */
 export function dueFeeds(db: Db, now: Date, limit = MAX_FEEDS_PER_TICK) {
@@ -77,4 +77,21 @@ export function matchScore(
 	if (request.method !== 'POST') return null;
 	const m = new URL(request.url).pathname.match(SCORE_PATH);
 	return m ? { kind: m[1] as 'post' | 'link', userId: m[2], itemId: m[3] } : null;
+}
+
+/** Users whose items are categorized per cron tick (Slice 12d); each is one subrequest. */
+export const MAX_CATEGORIZE_PER_RUN = 1;
+
+const USER_PATH = new RegExp(`^/(categorize|categories/suggest|categories/check)/(${ID})$`);
+
+export type CategoryJob = 'categorize' | 'categories/suggest' | 'categories/check';
+
+export const categoryUrl = (job: CategoryJob, userId: string) =>
+	`https://fetcher.internal/${job}/${userId}`;
+
+/** A category job for one user: POST /categorize/:user, /categories/suggest/:user or /categories/check/:user. */
+export function matchCategoryJob(request: Request): { job: CategoryJob; userId: string } | null {
+	if (request.method !== 'POST') return null;
+	const m = new URL(request.url).pathname.match(USER_PATH);
+	return m ? { job: m[1] as CategoryJob, userId: m[2] } : null;
 }

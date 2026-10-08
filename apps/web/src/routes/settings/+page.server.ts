@@ -1,15 +1,27 @@
 import { fail } from '@sveltejs/kit';
+import { dev } from '$app/environment';
+import {
+	CategoryError,
+	getCategorySettings,
+	listCategories,
+	saveCategories
+} from '@reading-list/core';
+import { check, parseDraft, suggest } from '$lib/server/categories';
 import { ApiError, listActivity, undoActivity } from '$lib/server/agent';
 import { createToken, listTokens, revokeToken } from '$lib/server/tokens';
 import { PRESETS } from '$lib/tokens';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	const [tokens, activity] = await Promise.all([
+	const [tokens, activity, categories, categorySettings] = await Promise.all([
 		listTokens(locals.db, locals.user.id),
-		listActivity(locals.db, locals.user.id, 40)
+		listActivity(locals.db, locals.user.id, 40),
+		listCategories(locals.db, locals.user.id),
+		getCategorySettings(locals.db, locals.user.id)
 	]);
 	return {
+		categories,
+		includeLibrary: categorySettings.includeLibrary,
 		email: locals.user.email,
 		apiUrl: new URL('/api/links', url).toString(),
 		mcpUrl: new URL('/api/mcp', url).toString(),
@@ -33,6 +45,34 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
+	/** Drafts categories with the text model. Nothing is saved. */
+	suggestCategories: async ({ locals, platform }) => {
+		const result = await suggest(platform, { dev, db: locals.db }, locals.user.id);
+		if (!result.ok) return fail(400, { categoryError: result.error });
+		return { suggestions: result.value };
+	},
+
+	/** Sorts a sample with the draft and reports how it went. Nothing is saved. */
+	checkCategories: async ({ locals, platform, request }) => {
+		const draft = parseDraft((await request.formData()).get('draft'));
+		const result = await check(platform, { dev, db: locals.db }, locals.user.id, draft);
+		if (!result.ok) return fail(400, { categoryError: result.error });
+		return { report: result.value };
+	},
+
+	saveCategories: async ({ locals, request }) => {
+		const form = await request.formData();
+		try {
+			const saved = await saveCategories(locals.db, locals.user.id, parseDraft(form.get('draft')), {
+				includeLibrary: form.get('includeLibrary') === 'on'
+			});
+			return { savedCategories: saved.length };
+		} catch (err) {
+			if (err instanceof CategoryError) return fail(400, { categoryError: err.message });
+			throw err;
+		}
+	},
+
 	create: async ({ request, locals }) => {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
 	archiveUrl,
+	categoryUrl,
+	matchCategoryJob,
 	isKick,
 	KICK_URL,
 	matchArchive,
@@ -60,6 +62,28 @@ describe('matchScore', () => {
 		new Request(`https://fetcher.internal/score/post/${user}/a-b`, { method: 'POST' })
 	])('rejects %s', (request) => {
 		expect(matchScore(request)).toBeNull();
+	});
+});
+
+describe('matchCategoryJob', () => {
+	const user = '01M3KW4JM8VYYV82Z9MC6HVAC0';
+
+	it.each(['categorize', 'categories/suggest', 'categories/check'] as const)(
+		'accepts %s',
+		(job) => {
+			expect(matchCategoryJob(new Request(categoryUrl(job, user), { method: 'POST' }))).toEqual({
+				job,
+				userId: user
+			});
+		}
+	);
+
+	it.each([
+		new Request(categoryUrl('categorize', user)),
+		new Request(`https://fetcher.internal/categories/delete/${user}`, { method: 'POST' }),
+		new Request(`https://fetcher.internal/categorize/${user}/x`, { method: 'POST' })
+	])('rejects %s', (request) => {
+		expect(matchCategoryJob(request)).toBeNull();
 	});
 });
 

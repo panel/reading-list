@@ -22,7 +22,11 @@
 	// Workers AI, for Slice 12's predictions. AI_DAILY_NEURONS is the app's own
 	// daily cap on it (Workers AI gives 10,000 neurons a day free).
 	"ai": { "binding": "AI" },
-	"vars": { "AI_DAILY_NEURONS": "2000" },
+	// AI_TEXT_MODEL drafts categories ("Suggest categories" in Settings).
+	"vars": {
+		"AI_DAILY_NEURONS": "2000",
+		"AI_TEXT_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+	},
 	// Each due feed is fetched in its own invocation through this binding, so a
 	// large feed gets a fresh CPU budget instead of sharing the cron's.
 	"services": [{ "binding": "SELF", "service": "reading-list-fetcher" }]

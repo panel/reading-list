@@ -129,6 +129,8 @@ app refuses every request with a 500.
    Since Slice 12 the fetcher also binds Workers AI (`AI`), with the app's own
    daily cap in the `AI_DAILY_NEURONS` variable (default 2,000 of the 10,000 free
    neurons a day). Usage shows under AI → Workers AI in the dashboard.
+   `AI_TEXT_MODEL` is the Workers AI text model behind Settings → Categories →
+   Suggest; if Cloudflare retires it, set another instruct model there and redeploy.
 
 6. **Let GitHub Actions deploy from now on.** Create an API token (My Profile →
    API Tokens → Create Token → "Edit Cloudflare Workers" template, then add

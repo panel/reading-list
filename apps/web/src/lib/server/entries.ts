@@ -48,18 +48,29 @@ function subscribedEntries(db: Db, userId: string) {
 		.leftJoin(links, and(eq(links.sourceEntryId, feedEntries.id), eq(links.userId, userId)));
 }
 
+/** Items the model (or the user) put in this category, as first or second choice. */
+export const inCategory = (userId: string, kind: 'post' | 'link', id: unknown, slug: string) =>
+	sql`${id} in (select item_id from item_categories where user_id = ${userId}
+		and item_kind = ${kind} and (primary_slug = ${slug} or secondary_slug = ${slug}))`;
+
 export type InboxEntry = Awaited<ReturnType<typeof getInbox>>['entries'][number];
 
 /** Entries from the user's feeds: unread first, then newest first. */
 export async function getInbox(
 	db: Db,
 	userId: string,
-	{ feedId, folder, limit = 60 }: { feedId?: string; folder?: string; limit?: number } = {}
+	{
+		feedId,
+		folder,
+		category,
+		limit = 60
+	}: { feedId?: string; folder?: string; category?: string; limit?: number } = {}
 ) {
 	const where = and(
 		isNull(entryState.dismissedAt),
 		feedId ? eq(feedEntries.feedId, feedId) : undefined,
-		folder ? eq(subscriptions.folder, folder) : undefined
+		folder ? eq(subscriptions.folder, folder) : undefined,
+		category ? inCategory(userId, 'post', feedEntries.id, category) : undefined
 	);
 	const entries = await subscribedEntries(db, userId)
 		.where(where)

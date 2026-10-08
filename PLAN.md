@@ -561,6 +561,40 @@ categories.
   ones go into the state as examples.
 - Optional one-time **Library backfill** (~500 links ≈ 1M tokens ≈ 8k neurons), spread
   over nights by the daily cap.
+- **Status (12d): built.** Migration 0015 adds `categories` (name, slug, description,
+  order), `category_settings` (Library on or off) and `item_categories` (primary and
+  optional secondary slug, probabilities, `corrected`).
+  - **Sorting** is its own decision call, not part of the open/keep call, so changing
+    categories re-sorts items without re-asking those. One call sorts up to 20 items:
+    the state lists the categories as rules, the user's last 10 corrections as
+    examples, then numbered items (title, source, first 120 words), with one `choice`
+    question per item (`item_1`…). A second category is kept when it gets ≥ 0.35.
+    The fetcher's cron sends one user per tick to `POST /categorize/:user`, which
+    sorts up to 10 uncategorized items: unread posts from the last week, Shared links,
+    and starred links if the Library is on. About 5 neurons an item.
+  - **Suggest** (`POST /categories/suggest/:user` on the fetcher, from Settings through
+    `FETCHER`) shows the text model (`AI_TEXT_MODEL`, default
+    `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, JSON mode) the feeds and folders, 120
+    recent post titles with a few words each, 50 starred titles and tags, and asks for
+    5–12 categories with rule-style descriptions and examples. With categories already
+    saved it also sees them, recent items placed in Other and corrections, and returns
+    a revised list ("Suggest changes"). Priced at the model's in/out neuron rates
+    (about 300–500 neurons a run) under the same cap.
+  - **Check** sorts a sample (25 recent posts, 15 starred links) with the draft and
+    reports counts and examples per category, Other, unsure picks (top < 0.5) and pairs
+    it confuses (top two within 0.2, twice or more). Nothing is saved.
+  - **Save** replaces the categories (slugs kept across renames), deletes the model's
+    placements so everything is re-sorted, and keeps corrections whose category still
+    exists.
+  - **UI:** Settings → Categories (Suggest / edit / Check / Save, "Also sort my
+    Library"). Inbox chips per category plus Other (`?category=`), filtering posts and
+    Shared links; rows show their categories; Mark all read is hidden in a category
+    view. Both readers have a Category picker; a pick is a correction.
+  - In dev the web app runs Suggest and Check itself with `stubAi()` (no fetcher, no
+    Workers AI); the fetcher's `AI_STUB` uses the same stub. Checked end to end on the
+    local D1 in Chromium: suggest, edit, check, save, cron sorting (10 a tick), chips
+    and filtering, a correction from the reader, and re-saves keeping or dropping
+    corrections.
 
 **12e: Use the scores**
 - An inbox order **Likely reads**: `p_open` with a freshness decay, next to Newest.

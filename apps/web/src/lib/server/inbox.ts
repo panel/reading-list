@@ -1,7 +1,14 @@
 import { and, count, desc, eq, ne } from 'drizzle-orm';
 import { links, type Db, type Link } from '@reading-list/core/db';
 import { displayTitle, siteLabel } from '$lib/format';
-import { getInbox as getPosts, nextUnread, unreadCount, type InboxEntry } from './entries';
+import { categoriesFor } from '@reading-list/core';
+import {
+	getInbox as getPosts,
+	inCategory,
+	nextUnread,
+	unreadCount,
+	type InboxEntry
+} from './entries';
 
 /**
  * The inbox: posts from the user's feeds plus the links they've shared in
@@ -23,10 +30,15 @@ export type InboxItem = {
 	date: Date;
 	read: boolean;
 	starred: boolean;
+	/** Category slugs: the first is the main one. Empty until it's been sorted. */
+	categories: string[];
 };
 
-/** `feed: 'shared'` shows only shared links; a feed id or a folder shows only posts. */
-export type InboxFilter = { feedId?: string; folder?: string };
+/**
+ * `feed: 'shared'` shows only shared links; a feed id or a folder shows only
+ * posts; a category shows posts and shared links in it.
+ */
+export type InboxFilter = { feedId?: string; folder?: string; category?: string };
 
 export const SHARED = 'shared';
 
@@ -44,7 +56,8 @@ function postItem(entry: InboxEntry): InboxItem {
 		imageUrl: entry.imageUrl,
 		date: entry.publishedAt ?? entry.createdAt,
 		read: Boolean(entry.readAt),
-		starred: Boolean(entry.linkIsReference)
+		starred: Boolean(entry.linkIsReference),
+		categories: []
 	};
 }
 
@@ -60,7 +73,8 @@ function sharedItem(link: Link): InboxItem {
 		imageUrl: link.imageUrl,
 		date: link.queuedAt,
 		read: false,
-		starred: link.isReference
+		starred: link.isReference,
+		categories: []
 	};
 }
 
@@ -71,18 +85,23 @@ const newestFirst = (a: InboxItem, b: InboxItem) =>
 export async function getInbox(
 	db: Db,
 	userId: string,
-	{ feedId, folder }: InboxFilter = {},
+	{ feedId, folder, category }: InboxFilter = {},
 	limit = 60
 ) {
 	const wantShared = !folder && (!feedId || feedId === SHARED);
 	const wantPosts = feedId !== SHARED;
 	const [posts, shared, [{ sharedTotal }]] = await Promise.all([
-		wantPosts ? getPosts(db, userId, { feedId, folder, limit }) : null,
+		wantPosts ? getPosts(db, userId, { feedId, folder, category, limit }) : null,
 		wantShared
 			? db
 					.select()
 					.from(links)
-					.where(sharedWhere(userId))
+					.where(
+						and(
+							sharedWhere(userId),
+							category ? inCategory(userId, 'link', links.id, category) : undefined
+						)
+					)
 					.orderBy(desc(links.queuedAt), desc(links.id))
 					.limit(limit)
 			: [],
@@ -94,6 +113,15 @@ export async function getInbox(
 		...[...postItems.filter((p) => !p.read), ...shared.map(sharedItem)].sort(newestFirst),
 		...postItems.filter((p) => p.read)
 	].slice(0, limit);
+	const placed = await categoriesFor(
+		db,
+		userId,
+		items.map((i) => ({ kind: i.kind === 'post' ? 'post' : 'link', id: i.id }))
+	);
+	for (const item of items) {
+		item.categories =
+			placed.get(`${item.kind === 'post' ? 'post' : 'link'}:${item.id}`)?.slugs ?? [];
+	}
 	return {
 		items,
 		unread: (posts?.unread ?? 0) + (wantShared ? shared.length : 0),

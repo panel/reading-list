@@ -6,6 +6,7 @@
 	import { ignoreShortcut } from '$lib/keys';
 	import { citeEntry, postAction } from '$lib/signals';
 	import { resolve } from '$app/paths';
+	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { hostname, relativeDay } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
@@ -140,6 +141,12 @@
 					><span aria-hidden="true">·</span>
 				{/if}
 				<span>{relativeDay(entry.publishedAt ?? entry.createdAt)}</span>
+				{#if data.categories.length}<span aria-hidden="true">·</span>
+					<CategoryPicker
+						categories={data.categories}
+						current={data.category}
+						action="?/category"
+					/>{/if}
 			</div>
 		</header>
 

@@ -1,14 +1,25 @@
 import { eq } from 'drizzle-orm';
 import {
+	BudgetError,
 	captureArchive,
+	categorizeCandidates,
+	categorizeForUser,
+	CategoryError,
+	checkCategories,
 	claimArchives,
 	dailyCap,
+	DEFAULT_TEXT_MODEL,
+	getCategorySettings,
 	pruneArchives,
 	pruneEntries,
 	refreshFeed,
 	scoreCandidates,
 	scoreItem,
-	type AiRunner
+	stubAi,
+	suggestCategories,
+	usersWithCategories,
+	type AiRunner,
+	type CategoryDraft
 } from '@reading-list/core';
 import { feeds, getDb, type Db } from '@reading-list/core/db';
 import {
@@ -17,8 +28,11 @@ import {
 	isKick,
 	matchArchive,
 	matchPoll,
+	categoryUrl,
+	matchCategoryJob,
 	matchScore,
 	MAX_ARCHIVES_PER_RUN,
+	MAX_CATEGORIZE_PER_RUN,
 	MAX_SCORES_PER_RUN,
 	pollUrl,
 	PRUNE_CRON,
@@ -30,15 +44,51 @@ import {
  * remotely, so local runs without a Cloudflare login use the stub.
  */
 function aiRunner(env: Env): AiRunner {
-	if ((env as { AI_STUB?: string }).AI_STUB) {
-		return {
-			run: async () => ({
-				answers: { open: { noul: 0.7 }, keep: { noul: 0.2 } },
-				usage: { input_tokens: 1000 }
-			})
-		};
-	}
+	if ((env as { AI_STUB?: string }).AI_STUB) return stubAi();
 	return { run: (model, input) => env.AI.run(model as never, input as never) };
+}
+
+/** Sends users with uncategorized items to /categorize/:user, each in its own invocation. */
+async function dispatchCategorize(db: Db, env: Env, now: Date) {
+	let sent = 0;
+	for (const userId of await usersWithCategories(db)) {
+		if (sent >= MAX_CATEGORIZE_PER_RUN) break;
+		const settings = await getCategorySettings(db, userId);
+		const pending = await categorizeCandidates(db, userId, 1, { ...settings, now: now.getTime() });
+		if (!pending.length) continue;
+		sent++;
+		const response = await env.SELF.fetch(categoryUrl('categorize', userId), { method: 'POST' });
+		const result = response.ok ? await response.json() : { status: response.status };
+		console.log(JSON.stringify({ categorize: userId, ...(result as object) }));
+	}
+}
+
+/** Runs a category job; a refusal (no budget, a bad draft) comes back as 400 with a message. */
+async function categoryJob(env: Env, job: string, userId: string, request: Request) {
+	const db = getDb(env.DB);
+	const ai = aiRunner(env);
+	const cap = dailyCap(env.AI_DAILY_NEURONS);
+	try {
+		if (job === 'categorize')
+			return Response.json(await categorizeForUser(db, ai, userId, { cap }));
+		if (job === 'categories/suggest') {
+			const model = (env as { AI_TEXT_MODEL?: string }).AI_TEXT_MODEL || DEFAULT_TEXT_MODEL;
+			return Response.json({
+				suggestions: await suggestCategories(db, ai, userId, { cap, model })
+			});
+		}
+		const { draft } = (await request.json()) as { draft: CategoryDraft[] };
+		return Response.json({ report: await checkCategories(db, ai, userId, draft ?? [], { cap }) });
+	} catch (err) {
+		if (err instanceof CategoryError || err instanceof BudgetError) {
+			return Response.json({ error: err.message }, { status: 400 });
+		}
+		console.error(err);
+		return Response.json(
+			{ error: err instanceof Error ? err.message : String(err) },
+			{ status: 500 }
+		);
+	}
 }
 
 /**
@@ -110,6 +160,7 @@ export default {
 		if (archives.archived) console.log(JSON.stringify(archives));
 		const scores = await dispatchScores(db, env, now);
 		if (Object.keys(scores).length) console.log(JSON.stringify({ scores }));
+		await dispatchCategorize(db, env, now).catch((err) => console.error(err));
 		const due = await dueFeeds(db, now);
 		if (due.length === 0) return;
 
@@ -139,6 +190,9 @@ export default {
 		if (isKick(request)) {
 			return Response.json(await dispatchArchives(getDb(env.DB), env, new Date()));
 		}
+		const categoryRequest = matchCategoryJob(request);
+		if (categoryRequest)
+			return categoryJob(env, categoryRequest.job, categoryRequest.userId, request);
 		const score = matchScore(request);
 		if (score) {
 			const result = await scoreItem(getDb(env.DB), aiRunner(env), score, {

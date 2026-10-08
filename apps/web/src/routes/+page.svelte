@@ -87,8 +87,21 @@
 				unread: data.feeds.filter((f) => f.folder === name).reduce((n, f) => n + f.unread, 0)
 			}))
 	);
-	// The filter the page is showing: Shared, one feed, one folder, or everything.
-	const scopeTitle = $derived(showingShared ? 'Shared' : (current?.title ?? data.folder ?? null));
+	const categoryName = $derived(
+		new Map([...data.categories.map((c) => [c.slug, c.name] as const), ['other', 'Other'] as const])
+	);
+	const currentCategory = $derived(
+		data.category
+			? data.category === 'other'
+				? 'Other'
+				: (data.categories.find((c) => c.slug === data.category)?.name ?? null)
+			: null
+	);
+	// The filter the page is showing: Shared, a category, one feed, one folder, or everything.
+	const scopeTitle = $derived(
+		showingShared ? 'Shared' : (currentCategory ?? current?.title ?? data.folder ?? null)
+	);
+	const showingAll = $derived(!data.feedId && !data.folder && !data.category);
 	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const unreadPosts = $derived(data.inbox.items.filter((i) => i.kind === 'post' && !i.read).length);
 	const empty = $derived(data.feeds.length === 0 && data.inbox.shared === 0);
@@ -192,8 +205,8 @@
 				<li>
 					<a
 						href={resolve('/')}
-						aria-current={!data.feedId && !data.folder ? 'page' : undefined}
-						class={chip(!data.feedId && !data.folder)}>All</a
+						aria-current={showingAll ? 'page' : undefined}
+						class={chip(showingAll)}>All</a
 					>
 				</li>
 				<li>
@@ -206,6 +219,15 @@
 							>{/if}</a
 					>
 				</li>
+				{#each [...data.categories, ...(data.categories.length ? [{ slug: 'other', name: 'Other' }] : [])] as c (c.slug)}
+					<li>
+						<a
+							href="{resolve('/')}?category={encodeURIComponent(c.slug)}"
+							aria-current={data.category === c.slug ? 'page' : undefined}
+							class={chip(data.category === c.slug)}>{c.name}</a
+						>
+					</li>
+				{/each}
 				{#each folders as f (f.name)}
 					<li>
 						<a
@@ -292,6 +314,9 @@
 									{#if item.kind === 'shared'}<span class="text-ink-2">Shared ·</span>{/if}
 									{item.source} · {relativeDay(item.date)}
 									{#if item.starred}<span class="text-ink-2">· ★</span>{/if}
+									{#if item.categories.length && !data.category}<span class="text-ink-3"
+											>· {item.categories.map((c) => categoryName.get(c) ?? c).join(', ')}</span
+										>{/if}
 								</span>
 								<span
 									class="headline text-[1.3125rem] leading-[1.15] group-hover:text-accent-strong"
@@ -348,7 +373,7 @@
 				</li>
 			{/each}
 		</ul>
-		{#if unreadPosts && !showingShared}
+		{#if unreadPosts && !showingShared && !data.category}
 			<form
 				method="POST"
 				action="?/markAllRead"

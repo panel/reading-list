@@ -357,6 +357,68 @@ export const predictions = sqliteTable(
 	]
 );
 
+/**
+ * A user's categories (Slice 12d): a name, and a one-line description the
+ * decision model uses as the rule for what belongs. The slug is the option id
+ * sent to the model, so it must stay within the API's id characters. "other"
+ * is implicit and never stored.
+ */
+export const categories = sqliteTable(
+	'categories',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		slug: text('slug').notNull(),
+		name: text('name').notNull(),
+		description: text('description').notNull(),
+		position: integer('position').notNull().default(0),
+		createdAt: timestampNow('created_at')
+	},
+	(t) => [uniqueIndex('categories_user_slug').on(t.userId, t.slug)]
+);
+
+/** Per-user category options. */
+export const categorySettings = sqliteTable('category_settings', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	// Also categorize starred links (the Library), not just the inbox.
+	includeLibrary: integer('include_library', { mode: 'boolean' }).notNull().default(false),
+	updatedAt: timestampNow('updated_at')
+});
+
+/**
+ * The category of an item in the inbox or Library: the model's top pick, a
+ * second one when it's also likely, or the user's correction. Saving new
+ * categories clears the model's rows, so items are categorized again. "other"
+ * is a valid slug here. No FK on the item: posts get pruned.
+ */
+export const itemCategories = sqliteTable(
+	'item_categories',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemKind: text('item_kind', { enum: ['post', 'link'] }).notNull(),
+		itemId: text('item_id').notNull(),
+		primarySlug: text('primary_slug').notNull(),
+		secondarySlug: text('secondary_slug'),
+		// The model's probability for each slug, as JSON; null for a correction.
+		probabilities: text('probabilities'),
+		// Set by the user (a correction), so it survives re-categorizing.
+		corrected: integer('corrected', { mode: 'boolean' }).notNull().default(false),
+		updatedAt: timestampNow('updated_at')
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.itemKind, t.itemId] }),
+		index('item_categories_primary').on(t.userId, t.primarySlug),
+		index('item_categories_secondary').on(t.userId, t.secondarySlug),
+		check('item_categories_item_kind', sql`${t.itemKind} IN ('post', 'link')`)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
@@ -368,3 +430,4 @@ export type FeedEntry = typeof feedEntries.$inferSelect;
 export type EntryHistory = typeof entryHistory.$inferSelect;
 export type LinkArchive = typeof linkArchives.$inferSelect;
 export type Prediction = typeof predictions.$inferSelect;
+export type Category = typeof categories.$inferSelect;
