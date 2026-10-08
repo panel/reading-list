@@ -41,11 +41,14 @@ export {
 export {
 	decide,
 	estimateCall,
+	InvalidQuestionError,
 	parseAnswers,
+	parseUsage,
+	validateQuestions,
 	type AiRunner,
 	type Answer,
 	type Answers,
 	type Question
 } from './ai/decide';
 export { DECISION_MODELS, estimateNeurons, estimateTokens, type DecisionModel } from './ai/models';
-export { dailyCap, reserveNeurons, usageDay } from './ai/usage';
+export { dailyCap, reserveNeurons, settleNeurons, usageDay } from './ai/usage';

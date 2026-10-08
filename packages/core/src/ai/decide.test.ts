@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { decide, estimateCall, parseAnswers, toRequest, type Question } from './decide';
+import {
+	decide,
+	estimateCall,
+	InvalidQuestionError,
+	parseAnswers,
+	parseUsage,
+	toRequest,
+	type Question
+} from './decide';
 import { estimateNeurons } from './models';
 import { dailyCap, usageDay } from './usage';
 
@@ -26,6 +34,37 @@ describe('toRequest', () => {
 				}
 			}
 		});
+	});
+});
+
+describe('validation', () => {
+	const choice = (options: Record<string, string>): Record<string, Question> => ({
+		c: { type: 'choice', instructions: 'Which?', options }
+	});
+
+	it.each([
+		['no questions', {}],
+		['a bad question id', { 'has space': questions.open }],
+		['a choice with one option', choice({ only: 'One' })],
+		['a bad option id', choice({ ok: 'Fine', 'not ok': 'Spaces' })],
+		['empty instructions', { q: { type: 'noul', instructions: ' ' } }]
+	] as [string, Record<string, Question>][])('rejects %s before sending', (_, qs) => {
+		expect(() => toRequest('clef-flash', 'state', qs)).toThrow(InvalidQuestionError);
+	});
+
+	it('rejects more than 64 questions', () => {
+		const many = Object.fromEntries(
+			Array.from({ length: 65 }, (_, i) => [`q${i}`, questions.open])
+		);
+		expect(() => toRequest('clef-flash', 'state', many)).toThrow(InvalidQuestionError);
+	});
+});
+
+describe('parseUsage', () => {
+	it('reads input tokens from either wrapper, or reports none', () => {
+		expect(parseUsage({ usage: { input_tokens: 10 } })).toBe(10);
+		expect(parseUsage({ result: { usage: { prompt_tokens: 20 } } })).toBe(20);
+		expect(parseUsage({ answers: {} })).toBeNull();
 	});
 });
 
@@ -74,12 +113,16 @@ describe('decide', () => {
 		const ai = {
 			run: async (model: string, input: Record<string, unknown>) => {
 				calls.push([model, input]);
-				return { answers: { open: { noul: 0.5 } } };
+				return { answers: { open: { noul: 0.5 } }, usage: { input_tokens: 812 } };
 			}
 		};
-		const answers = await decide(ai, 'clef-flash', 'state', { open: questions.open });
+		const { answers, inputTokens } = await decide(ai, 'clef-flash', 'state', {
+			open: questions.open
+		});
 		expect(calls[0][0]).toBe('@cf/cloudflare/clef-flash');
+		expect(calls[0][1]).toMatchObject({ model: 'clef-flash', state: 'state' });
 		expect(answers.open).toEqual({ type: 'noul', p: 0.5 });
+		expect(inputTokens).toBe(812);
 	});
 });
 

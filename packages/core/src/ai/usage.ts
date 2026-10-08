@@ -27,6 +27,17 @@ export async function reserveNeurons(
 	return rows.length > 0;
 }
 
+/**
+ * Corrects today's total once a call reports what it actually used: adds the
+ * difference from the estimate that was reserved (which may be negative).
+ */
+export async function settleNeurons(db: Db, estimated: number, actual: number, now = new Date()) {
+	const delta = actual - estimated;
+	if (delta === 0) return;
+	await db.run(sql`
+		update ai_usage set neurons = max(0, neurons + ${delta}) where day = ${usageDay(now)}`);
+}
+
 /** Parses the AI_DAILY_NEURONS variable; anything unusable falls back to the default. */
 export function dailyCap(value: unknown, fallback = 2000): number {
 	const n = Number(value);

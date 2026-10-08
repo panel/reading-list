@@ -505,10 +505,16 @@ categories.
   with `type` and `instructions`, a choice's options in `criteria`. `parseAnswers`
   accepts the response shapes sources disagree on (a yes/no as a bare number or
   `{ noul }`; choice probabilities nested or not; a REST `result` wrapper) and drops
-  what it can't read. **Verify against a live response in 12c.** Costs are estimated
-  from the request size (~4 characters a token) at the published neuron rates;
-  `reserveNeurons` adds them to today's `ai_usage` row in one conditional upsert and
-  refuses past the cap (checked on the local D1). Migration 0013 adds `ai_usage`. The
+  what it can't read. **Verify against a live response in 12c** (log the first one).
+  `validateQuestions` enforces the API's limits before anything is spent: 1–64
+  questions, ids of `[A-Za-z0-9_.-]` up to 100 characters, 2–255 options per choice
+  (so category ids in 12d must be slugs). Costs are estimated from the request size
+  (~4 characters a token) at the published neuron rates; `reserveNeurons` adds them to
+  today's `ai_usage` row in one conditional upsert and refuses past the cap, and
+  `settleNeurons` corrects it from the response's `usage` when present (both checked on
+  the local D1). **For 12c:** the first call to a cold model can take close to a minute,
+  so model calls run in the fetcher, each item in its own invocation, never on a page
+  request. Migration 0013 adds `ai_usage`. The
   fetcher binds `AI` with `AI_DAILY_NEURONS = 2000`; nothing calls it yet. Workers AI
   bindings are always remote, so `wrangler dev` for the fetcher now needs
   `wrangler login` (docs/setup.md).
