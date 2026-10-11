@@ -626,6 +626,38 @@ the Library backfill; whether Clef (27B) earns its ~2.7× cost over Clef-flash.
 **Later:** Cloudflare's RL fine-tuning for Clef, trained on `predictions` against
 outcomes and on category corrections, once it's self-serve.
 
+### Slice 13: A reading digest for my agent, and a post interview
+*"Have my agent look at what I've been reading, ask me probing questions about it, and help me turn it into a LinkedIn post."*
+
+The app doesn't write anything itself. The conversation happens in the user's own
+agent (Muse, Claude or any MCP client). The app gives that agent the **material** (what
+the user actually reacted to) and a **method** (how to interview them). Posting stays by
+hand.
+
+- **Reading digest:** `list_recent_reading` (MCP) and `GET /api/reading` (REST), with
+  `links:read`. It lists saved links finished, starred, opened, shared or noted in the
+  last N days (default 14, up to 90). With `feeds:read` it adds feed posts that were
+  opened or shared. Items are ranked by `reactionScore` (`packages/core/src/reactions.ts`):
+  a note or a star counts 3, each share 2 (capped at three), an open 1, Done ½. Each
+  item carries its note, tags, category and the reasons in words. It's useful on its own
+  ("what have I been into lately?"), not just for posts.
+- **Interview guide** (`lib/server/interview.ts`): find candidates, read the source,
+  ask one question at a time (reaction → tension → evidence → stakes → a one-sentence
+  point), push back on vague answers, and draft only then, in the user's words. No
+  invented stories or numbers. LinkedIn format: the hook before "…see more", the link
+  in the first comment. It's served three ways, so tools-only clients get it too: the
+  MCP prompt `post_interview`, the tool `get_post_interview_guide` and
+  `GET /api/reading/guide`. The server's instructions point agents at it.
+- **No new tables.** The agent can add the gist of the user's answers to the source's
+  note (`update_link`, with their okay), and a note ranks the item higher in the next
+  digest.
+- **Not built (a bigger version, if this earns it):** drafts with sources and the
+  interview stored in the app, a Writing page with a character count and "Mark posted",
+  and a "Post idea" button on links.
+- **Status: built.** Checked on the local dev server over MCP and REST with seeded
+  links, posts and tokens: ranking, the window, a saved post listed only once, posts
+  left out without `feeds:read`, the prompt, and 401 without a token.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshot images:** copy starred links' images to R2 so dead images don't break
   the library (Slice 11 keeps text only).

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentContext } from './agent';
 import { htmlToText } from './agent';
-import { handleMcp, SUPPORTED_VERSIONS, TOOLS } from './mcp';
+import { INTERVIEW_GUIDE } from './interview';
+import { handleMcp, PROMPTS, SUPPORTED_VERSIONS, TOOLS } from './mcp';
 
 // No database: these cases never reach one (protocol methods, or a scope check first).
 const ctx = (scopes: string) =>
@@ -22,7 +23,10 @@ describe('handleMcp', () => {
 			result: Record<string, unknown>;
 		};
 		expect(res.result.protocolVersion).toBe('2025-06-18');
-		expect(res.result.capabilities).toEqual({ tools: { listChanged: false } });
+		expect(res.result.capabilities).toEqual({
+			tools: { listChanged: false },
+			prompts: { listChanged: false }
+		});
 		const other = (await call('initialize', { protocolVersion: '1999-01-01' })) as {
 			result: { protocolVersion: string };
 		};
@@ -72,6 +76,47 @@ describe('handleMcp', () => {
 		})) as { result: { isError: boolean; content: { text: string }[] } };
 		expect(res.result.isError).toBe(true);
 		expect(res.result.content[0].text).toContain('feeds:write');
+	});
+
+	it('needs links:read for the reading digest', async () => {
+		const res = (await handleMcp(ctx('feeds:read'), {
+			jsonrpc: '2.0',
+			id: 9,
+			method: 'tools/call',
+			params: { name: 'list_recent_reading', arguments: {} }
+		})) as { result: { isError: boolean; content: { text: string }[] } };
+		expect(res.result.isError).toBe(true);
+		expect(res.result.content[0].text).toContain('links:read');
+	});
+
+	it('serves the interview guide as a tool', async () => {
+		const res = (await call('tools/call', { name: 'get_post_interview_guide' })) as {
+			result: { isError: boolean; structuredContent: { guide: string } };
+		};
+		expect(res.result.isError).toBe(false);
+		expect(res.result.structuredContent.guide).toBe(INTERVIEW_GUIDE);
+	});
+
+	it('lists the post interview prompt and fills in its arguments', async () => {
+		expect(await call('prompts/list')).toMatchObject({ result: { prompts: PROMPTS } });
+		const res = (await call('prompts/get', {
+			name: 'post_interview',
+			arguments: { topic: ' platform teams ', days: '7' }
+		})) as { result: { messages: { role: string; content: { text: string } }[] } };
+		const [message] = res.result.messages;
+		expect(message.role).toBe('user');
+		expect(message.content.text).toContain('write a LinkedIn post about: platform teams.');
+		expect(message.content.text).toContain(INTERVIEW_GUIDE);
+		const plain = (await call('prompts/get', {
+			name: 'post_interview',
+			arguments: { days: '7' }
+		})) as {
+			result: { messages: { content: { text: string } }[] };
+		};
+		expect(plain.result.messages[0].content.text).toMatch(
+			/^Help me turn something I read in the last 7 days/
+		);
+		expect(await call('prompts/get', { name: 'nope' })).toMatchObject({ error: { code: -32602 } });
 	});
 
 	it('rejects unknown tools', async () => {

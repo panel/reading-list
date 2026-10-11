@@ -39,6 +39,7 @@ import {
 	starLink,
 	type LinkWithTags
 } from './links';
+import { recentReading } from './reading';
 import { MATCH_END, MATCH_START, searchLinks } from './search';
 import { hasScope } from './tokens';
 
@@ -409,6 +410,46 @@ export async function updateLinkOp(
 		{ type: 'restoreLink', id, snapshot: before }
 	);
 	return { changed: changes, link: linkJson(link, ctx.origin) };
+}
+
+/**
+ * The reading digest: what the user read and reacted to lately, strongest
+ * reaction first. Feed posts are included when the token can read feeds.
+ */
+export async function recentReadingOp(
+	ctx: AgentContext,
+	input: { days?: unknown; limit?: unknown }
+) {
+	need(ctx, 'links:read');
+	const days = clampLimit(input.days, 14, 90);
+	const posts = hasScope(ctx.token, 'feeds:read');
+	const items = await recentReading(ctx.db, ctx.user.id, {
+		days,
+		limit: clampLimit(input.limit, 20, 50),
+		posts
+	});
+	return {
+		days,
+		includesPosts: posts,
+		items: items.map((item) => ({
+			kind: item.kind,
+			id: item.id,
+			title: item.title,
+			url: item.url,
+			source: item.source,
+			author: item.author,
+			note: item.note,
+			tags: item.tags,
+			category: item.category,
+			reasons: item.reasons,
+			score: item.score,
+			lastActivity: item.lastActivity.toISOString(),
+			appUrl: new URL(
+				item.kind === 'link' ? `/links/${item.id}` : `/entries/${item.id}`,
+				ctx.origin
+			).toString()
+		}))
+	};
 }
 
 // ——— Feeds —————————————————————————————————————————————————————————

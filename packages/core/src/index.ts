@@ -96,3 +96,4 @@ export {
 	type Scorecard,
 	type Scores
 } from './ai/predictions';
+export { reactionReasons, reactionScore, type ReadingSignals } from './reactions';
