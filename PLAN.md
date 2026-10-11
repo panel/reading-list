@@ -661,6 +661,21 @@ hand.
   links, posts and tokens: ranking, the window, a saved post listed only once, posts
   left out without `feeds:read`, the prompt, and 401 without a token.
 
+### Read to me
+*"Read this article to me."*
+- **Status: built**, on-device: a "Read to me" button on the post reader and on saved
+  links with a readable copy (`lib/components/ReadAloud.svelte`). It uses the browser's
+  Web Speech API and the device's own voices (Apple's premium or enhanced voice when
+  installed), so it's free and nothing leaves the phone. It reads a paragraph at a time,
+  in sentence-sized pieces (`lib/speech.ts`), highlights the paragraph being read, and
+  scrolls along only while you're following. It starts at the title, or at the first
+  paragraph in view if you've scrolled in. The controls stay pinned at the top: pause,
+  speed (1×, 1.25×, 1.5×, 0.85×, remembered per device) and stop.
+- **Limit:** iOS stops speaking when the screen locks or you leave the app, so it's for
+  reading along, not listening in your pocket. If that's wanted: Workers AI MeloTTS
+  (about $0.002 an article, within the free daily neurons), with the audio stored in R2
+  and played through an `<audio>` element, which keeps playing in the background.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshot images:** copy starred links' images to R2 so dead images don't break
   the library (Slice 11 keeps text only).

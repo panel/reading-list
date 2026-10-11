@@ -8,6 +8,7 @@
 	import { resolve } from '$app/paths';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
+	import ReadAloud from '$lib/components/ReadAloud.svelte';
 	import { hostname, relativeDay } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 
@@ -25,6 +26,7 @@
 				: resolve('/links/[id]', { id: data.next.id })
 	);
 	let starForm = $state<HTMLFormElement>();
+	let article = $state<HTMLElement>();
 	let editingNote = $state(false);
 	let noteForm = $state<HTMLFormElement>();
 
@@ -150,14 +152,18 @@
 			</div>
 		</header>
 
+		{#if data.html || entry.summary}
+			<ReadAloud title={entry.title ?? ''} target={article} />
+		{/if}
+
 		{#if data.html}
 			<!-- Sanitized server-side (sanitizeEntryHtml) and covered by the CSP. -->
-			<div class="prose mt-6">
+			<div bind:this={article} class="prose mt-6">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html data.html}
 			</div>
 		{:else if entry.summary}
-			<p class="prose mt-6">{entry.summary}</p>
+			<p bind:this={article} class="prose mt-6">{entry.summary}</p>
 		{/if}
 
 		<div aria-hidden="true" class="mt-6 text-center text-sm tracking-[0.4em] text-accent">■</div>

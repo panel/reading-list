@@ -6,6 +6,7 @@
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import Favicon from '$lib/components/Favicon.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
+	import ReadAloud from '$lib/components/ReadAloud.svelte';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
 	import { ignoreShortcut } from '$lib/keys';
 	import { citeLink, postAction } from '$lib/signals';
@@ -24,6 +25,7 @@
 	});
 
 	let editing = $state(false);
+	let article = $state<HTMLElement>();
 	let noteSection = $state<HTMLElement>();
 	let busy = $state(false);
 
@@ -381,8 +383,9 @@
 	</section>
 
 	{#if data.reader}
+		<ReadAloud title={displayTitle(link)} target={article} />
 		<!-- Sanitized server-side (sanitizeEntryHtml) and covered by the CSP. -->
-		<div class="prose mt-2">
+		<div bind:this={article} class="prose mt-2">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 			{@html data.reader.html}
 		</div>

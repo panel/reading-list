@@ -139,6 +139,12 @@
 	.prose :is(h4, h5, h6) {
 		font-size: 1.05em;
 	}
+	/* The paragraph being read aloud (ReadAloud). */
+	.prose .reading-now {
+		background: var(--color-sunk);
+		box-shadow: 0 0 0 0.35em var(--color-sunk);
+		border-radius: 2px;
+	}
 	.prose a {
 		color: var(--color-accent);
 		text-decoration: underline;
