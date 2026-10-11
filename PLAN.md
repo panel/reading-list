@@ -648,6 +648,9 @@ hand.
   in the first comment. It's served three ways, so tools-only clients get it too: the
   MCP prompt `post_interview`, the tool `get_post_interview_guide` and
   `GET /api/reading/guide`. The server's instructions point agents at it.
+- **In the app:** Settings → Reading digest (`/settings/digest`) shows the same ranked
+  list for 7, 14, 30 or 90 days. Each item has why it's there, your note, tags and
+  category, and links to its reader.
 - **No new tables.** The agent can add the gist of the user's answers to the source's
   note (`update_link`, with their okay), and a note ranks the item higher in the next
   digest.

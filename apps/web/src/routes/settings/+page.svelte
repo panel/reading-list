@@ -271,6 +271,21 @@
 		{/if}
 	</section>
 
+	<section class="flex flex-col gap-3" aria-labelledby="digest-heading">
+		<div class="border-b-2 border-ink pb-3">
+			<h2 id="digest-heading" class="kicker text-ink-2">Reading digest</h2>
+		</div>
+		<p class="text-[1.0625rem] leading-[1.55]">
+			What you’ve read and reacted to lately, with your notes, ranked by what you did with it. It’s
+			the same list your agent gets from <code>list_recent_reading</code>.
+		</p>
+		<a
+			href={resolve('/settings/digest')}
+			class="flex h-11 w-fit items-center rounded-md border border-rule-strong px-4 font-ui text-sm font-bold text-ink hover:border-ink"
+			>See your digest →</a
+		>
+	</section>
+
 	<section class="flex flex-col gap-3" aria-labelledby="data-heading">
 		<div class="border-b-2 border-ink pb-3">
 			<h2 id="data-heading" class="kicker text-ink-2">Your data</h2>

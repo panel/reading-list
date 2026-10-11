@@ -132,6 +132,9 @@ it"`) and a `score` it's ranked by: a note or a star counts 3, each share 2 (up
 to three), an open 1 and Done ½. Use `get_link` or `read_entry` with its `id`
 for the full text.
 
+You can see the same list in the app under **Settings → Reading digest**
+(`/settings/digest`), for the last 7, 14, 30 or 90 days.
+
 ### Writing a LinkedIn post from it
 
 Ask your agent something like *"help me write a LinkedIn post from what I read
