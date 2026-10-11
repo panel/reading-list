@@ -7,13 +7,32 @@
 	import '@fontsource/atkinson-hyperlegible/400.css';
 	import '@fontsource/atkinson-hyperlegible/700.css';
 	import './layout.css';
-	import { page } from '$app/state';
+	import { beforeNavigate, invalidateAll } from '$app/navigation';
+	import { page, updated } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
 	import Palette from '$lib/components/Palette.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import { palette } from '$lib/palette.svelte';
+	import { atTop, awayLongEnough } from '$lib/resume';
 
 	let { children, data } = $props();
+
+	// Coming back to the app (see $lib/resume): note a new deploy, so the next
+	// navigation loads it, and refresh the data only if you're at the top.
+	let hiddenAt = Date.now();
+	function resume() {
+		updated.check().catch(() => {});
+		if (atTop(window.scrollY)) invalidateAll();
+	}
+	function onvisibilitychange() {
+		if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+		else if (awayLongEnough(hiddenAt, Date.now())) resume();
+	}
+	// After a deploy, the next link you tap loads the new version in full. Back
+	// and forward stay in-app, so returning to a story keeps your place.
+	beforeNavigate(({ type, willUnload, to }) => {
+		if (updated.current && type === 'link' && !willUnload && to?.url) location.href = to.url.href;
+	});
 	const badge = (n: number) => (n > 99 ? '99+' : String(n));
 
 	const tabs = [
@@ -47,6 +66,9 @@
 				)
 			: page.url.pathname.startsWith(href);
 </script>
+
+<svelte:document {onvisibilitychange} />
+<svelte:window onpageshow={(event) => event.persisted && resume()} />
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
