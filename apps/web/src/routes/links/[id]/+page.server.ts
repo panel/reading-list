@@ -2,10 +2,16 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import {
 	categoriesFor,
 	CategoryError,
+	clearPlace,
+	countWords,
+	getPlace,
+	isLongRead,
 	KEEP_CANDIDATE,
 	listCategories,
+	parsePlace,
 	predictionsFor,
 	requestArchive,
+	savePlace,
 	setItemCategory,
 	stripTags
 } from '@reading-list/core';
@@ -37,13 +43,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const [next, entry, archive, categories, placed, scores] = await Promise.all([
+	const [next, entry, archive, categories, placed, scores, place] = await Promise.all([
 		nextInboxItem(locals.db, locals.user.id, link.id),
 		entryForLink(locals.db, locals.user.id, link),
 		getArchive(locals.db, link.id),
 		listCategories(locals.db, locals.user.id),
 		categoriesFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }]),
-		predictionsFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }])
+		predictionsFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }]),
+		getPlace(locals.db, locals.user.id, 'link', link.id)
 	]);
 	// Read in the app: the saved copy, else the matching post from a feed you follow.
 	const source =
@@ -66,6 +73,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			? {
 					html,
 					minutes: readingMinutes(source!.text),
+					// A long read keeps your place, so you can leave it partway and come back.
+					long: isLongRead(archive?.status === 'ready' ? archive.words : countWords(source!.text)),
+					place,
 					kicker: entry?.feedTitle ?? siteLabel(link),
 					author: entry?.author ?? link.author,
 					date: entry ? (entry.publishedAt ?? entry.createdAt) : null,
@@ -96,6 +106,20 @@ export const actions: Actions = {
 	opened: async ({ locals, params }) => {
 		await markLinkOpened(locals.db, locals.user.id, params.id);
 		return { opened: true };
+	},
+
+	/** Where you are in a long read (block, progress), or `finished` to clear it. */
+	place: async ({ locals, params, request }) => {
+		const form = await request.formData();
+		if (!(await getLink(locals.db, locals.user.id, params.id))) return notFound();
+		if (form.get('finished') === 'true') {
+			await clearPlace(locals.db, locals.user.id, 'link', params.id);
+			return { place: null };
+		}
+		const place = parsePlace({ block: form.get('block'), progress: form.get('progress') });
+		if (!place) return fail(400, { message: 'Invalid place.' });
+		await savePlace(locals.db, locals.user.id, 'link', params.id, place);
+		return { place };
 	},
 
 	/** A correction: this link belongs in that category. */

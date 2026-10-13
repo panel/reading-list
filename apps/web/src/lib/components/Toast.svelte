@@ -37,6 +37,17 @@
 						>Undo</button
 					>
 				</form>
+			{:else if current.action}
+				{@const action = current.action}
+				<button
+					type="button"
+					onclick={() => {
+						toast.clear();
+						action.run();
+					}}
+					class="h-10 rounded px-3.5 font-bold whitespace-nowrap text-[#9fd3d6] hover:bg-paper/10 hover:text-paper"
+					>{action.label}</button
+				>
 			{/if}
 			<button
 				type="button"

@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { canonicalizeUrl, ulid } from '@reading-list/core';
+import { canonicalizeUrl, LONG_READ_WORDS, ulid, type ReadLength } from '@reading-list/core';
 import {
 	entryState,
 	feedEntries,
@@ -21,6 +21,7 @@ const listFields = {
 	author: feedEntries.author,
 	summary: feedEntries.summary,
 	imageUrl: feedEntries.imageUrl,
+	words: feedEntries.words,
 	publishedAt: feedEntries.publishedAt,
 	createdAt: feedEntries.createdAt,
 	feedTitle: sql<string>`coalesce(${subscriptions.titleOverride}, ${feeds.title}, ${feeds.url})`,
@@ -53,6 +54,14 @@ export const inCategory = (userId: string, kind: 'post' | 'link', id: unknown, s
 	sql`${id} in (select item_id from item_categories where user_id = ${userId}
 		and item_kind = ${kind} and (primary_slug = ${slug} or secondary_slug = ${slug}))`;
 
+/** Short or long reads, by word count; with a length filter, unknown lengths are left out. */
+export const ofLength = (words: unknown, length: ReadLength | null | undefined) =>
+	length === 'short'
+		? sql`${words} < ${LONG_READ_WORDS}`
+		: length === 'long'
+			? sql`${words} >= ${LONG_READ_WORDS}`
+			: undefined;
+
 export type InboxEntry = Awaited<ReturnType<typeof getInbox>>['entries'][number];
 
 /** Entries from the user's feeds: unread first, then newest first. */
@@ -63,14 +72,22 @@ export async function getInbox(
 		feedId,
 		folder,
 		category,
+		length,
 		limit = 60
-	}: { feedId?: string; folder?: string; category?: string; limit?: number } = {}
+	}: {
+		feedId?: string;
+		folder?: string;
+		category?: string;
+		length?: ReadLength | null;
+		limit?: number;
+	} = {}
 ) {
 	const where = and(
 		isNull(entryState.dismissedAt),
 		feedId ? eq(feedEntries.feedId, feedId) : undefined,
 		folder ? eq(subscriptions.folder, folder) : undefined,
-		category ? inCategory(userId, 'post', feedEntries.id, category) : undefined
+		category ? inCategory(userId, 'post', feedEntries.id, category) : undefined,
+		ofLength(feedEntries.words, length)
 	);
 	const entries = await subscribedEntries(db, userId)
 		.where(where)
@@ -78,6 +95,14 @@ export async function getInbox(
 		.limit(limit);
 	const unread = entries.filter((e) => !e.readAt).length;
 	return { entries, unread };
+}
+
+/** These posts, as listed in the inbox, if they're in the user's feeds and not dismissed. */
+export async function entriesByIds(db: Db, userId: string, ids: string[]) {
+	if (ids.length === 0) return [];
+	return subscribedEntries(db, userId).where(
+		and(inArray(feedEntries.id, ids), isNull(entryState.dismissedAt))
+	);
 }
 
 function entryDetails(db: Db, userId: string) {

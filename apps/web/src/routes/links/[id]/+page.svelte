@@ -7,6 +7,8 @@
 	import Favicon from '$lib/components/Favicon.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import ReadAloud from '$lib/components/ReadAloud.svelte';
+	import ReadingPlace from '$lib/components/ReadingPlace.svelte';
+	import { percent, STARTED } from '$lib/place';
 	import { displayTitle, hostname, relativeDay, siteLabel, wantsDropCap } from '$lib/format';
 	import { ignoreShortcut } from '$lib/keys';
 	import { citeLink, postAction } from '$lib/signals';
@@ -28,6 +30,12 @@
 	let article = $state<HTMLElement>();
 	let noteSection = $state<HTMLElement>();
 	let busy = $state(false);
+	/** How far into the readable copy you are, for the progress line. */
+	let progress = $state(0);
+	// Partway into a long read: offer to leave it in progress and move on.
+	const partway = $derived(
+		Boolean(data.reader?.long) && !archived && progress >= STARTED && progress < 1
+	);
 
 	// Opening the link page records the open, unless it's the page you land on
 	// right after saving it. Reading the post here also counts as opening it in
@@ -202,11 +210,11 @@
 		{/if}
 		<header class="flex flex-col gap-3">
 			<div class="kicker text-accent">
-				{data.reader.kicker} · {data.reader.minutes} min read{#if link.isReference}<span
+				{data.reader.kicker} · {data.reader.minutes} min read{#if data.reader.place}<span
 						class="text-ink-3"
 					>
-						· ★ Reference</span
-					>{/if}
+						· {percent(data.reader.place.progress)} read</span
+					>{/if}{#if link.isReference}<span class="text-ink-3"> · ★ Reference</span>{/if}
 			</div>
 			<h1 class="headline text-[2.375rem] leading-[1.04] tracking-[-0.018em] lg:text-[3.25rem]">
 				{displayTitle(link)}
@@ -389,6 +397,13 @@
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 			{@html data.reader.html}
 		</div>
+		<ReadingPlace
+			target={article}
+			action={action('place')}
+			saved={data.reader.place}
+			enabled={data.reader.long}
+			bind:progress
+		/>
 		<div aria-hidden="true" class="mt-2 text-center text-sm tracking-[0.4em] text-accent">■</div>
 		<a
 			href={link.url}
@@ -476,6 +491,14 @@
 <div
 	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
 >
+	{#if data.reader?.long}
+		<!-- How far you are: a long read keeps your place when you leave it. -->
+		<div
+			aria-hidden="true"
+			class="absolute -top-px left-0 h-0.5 bg-accent"
+			style:width="{progress * 100}%"
+		></div>
+	{/if}
 	<div class="mx-auto flex max-w-xl gap-2 px-3.5 py-2.5">
 		<form bind:this={starForm} method="POST" action={action('star')} use:enhance={star}>
 			<input type="hidden" name="starred" value={String(!link.isReference)} />
@@ -525,6 +548,14 @@
 				>
 			</form>
 		{:else}
+			{#if partway}
+				<!-- Your place is saved as you read; this just moves on. -->
+				<a
+					href={nextHref}
+					class="{barButton} flex-1 border-rule-strong bg-paper text-ink hover:border-ink"
+					>Finish later</a
+				>
+			{/if}
 			<form method="POST" use:enhance={triage} class="flex flex-1">
 				<button
 					bind:this={finishButton}

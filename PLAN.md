@@ -676,6 +676,33 @@ hand.
   (about $0.002 an article, within the free daily neurons), with the audio stored in R2
   and played through an `<audio>` element, which keeps playing in the background.
 
+### Long reads: keep my place, flip through short ones
+*"Leave a long read partway, read quick things, and finish it later where I left off."*
+- **Your place** (`reading_places`, migration 0016): in a long read (5 min or more), the
+  reader saves the paragraph you're on as you scroll (at most every 3 s, and when you
+  hide or leave the page), as a block index plus the share of words read, so it lands on
+  the same paragraph on another screen size. Opening it again scrolls you back there,
+  with a "Back where you left off · Start over" toast; back/forward keeps the browser's
+  own position. Reading to the end clears it. A thin line on the action bar shows how
+  far you are, and partway in the bar offers **Finish later** (the post's Next; a new
+  button beside Done on a shared link). Logic: `lib/place.ts`,
+  `lib/components/ReadingPlace.svelte`, `packages/core/src/places.ts`.
+- **Continue reading:** the inbox (All, any order, not the Short filter) opens with up to
+  four reads left partway, most recent first, with minutes left and a progress bar; they
+  aren't repeated in the list. Done (or dismissing a post) takes one off, and Undo puts it
+  back with its place. Rows elsewhere show "· 40% read".
+- **Length:** `feed_entries.words` is counted when a post is stored (the migration
+  estimates it for older posts from their spaces); a shared link uses its readable copy's
+  words. Each row shows its minutes, and the inbox has **Any length · Short · Long reads**
+  (`?length=`), kept across the filter chips. A link with no readable copy has no known
+  length, so it shows only under Any length.
+- **Housekeeping:** a post with a place isn't pruned; places untouched for 60 days are
+  forgotten by the nightly prune.
+- **Status: built.** Checked on the local dev server in a phone-sized browser with seeded
+  long and short posts and links: the place saved partway, Continue reading listed both,
+  Short showed only short posts, reopening returned to the same paragraph, and reading to
+  the end took it off the shelf.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshot images:** copy starred links' images to R2 so dead images don't break
   the library (Slice 11 keeps text only).

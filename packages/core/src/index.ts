@@ -97,3 +97,23 @@ export {
 	type Scores
 } from './ai/predictions';
 export { reactionReasons, reactionScore, type ReadingSignals } from './reactions';
+export {
+	clearPlace,
+	countWords,
+	entryWords,
+	getPlace,
+	isLongRead,
+	listPlaces,
+	LONG_READ_MINUTES,
+	LONG_READ_WORDS,
+	parsePlace,
+	parseReadLength,
+	PLACE_KEEP_DAYS,
+	prunePlaces,
+	readingMinutes,
+	savePlace,
+	WORDS_PER_MINUTE,
+	type Place,
+	type PlaceKind,
+	type ReadLength
+} from './places';

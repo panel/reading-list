@@ -166,6 +166,8 @@ export const feedEntries = sqliteTable(
 		// Raw HTML as published; sanitized when rendered.
 		content: text('content'),
 		imageUrl: text('image_url'),
+		// Words in the content (or summary), counted when stored: its reading time.
+		words: integer('words'),
 		publishedAt: timestamp('published_at'),
 		createdAt: timestampNow('created_at')
 	},
@@ -419,6 +421,32 @@ export const itemCategories = sqliteTable(
 	]
 );
 
+/**
+ * Where you stopped in a long read, so you can leave it partway, read other
+ * things, and come back to the same paragraph on any device. `block` is the
+ * paragraph (an index into the reader's text blocks), `progress` the share of
+ * its words before that paragraph. Finishing it deletes the row. No FK on the
+ * item: posts get pruned (though not while they have a recent place).
+ */
+export const readingPlaces = sqliteTable(
+	'reading_places',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemKind: text('item_kind', { enum: ['post', 'link'] }).notNull(),
+		itemId: text('item_id').notNull(),
+		block: integer('block').notNull(),
+		progress: real('progress').notNull(),
+		updatedAt: timestampNow('updated_at')
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.itemKind, t.itemId] }),
+		index('reading_places_user_updated').on(t.userId, t.updatedAt),
+		check('reading_places_item_kind', sql`${t.itemKind} IN ('post', 'link')`)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
@@ -431,3 +459,4 @@ export type EntryHistory = typeof entryHistory.$inferSelect;
 export type LinkArchive = typeof linkArchives.$inferSelect;
 export type Prediction = typeof predictions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
+export type ReadingPlace = typeof readingPlaces.$inferSelect;

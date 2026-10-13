@@ -5,6 +5,7 @@ import { readHead } from '../metadata';
 import { COMMON_FEED_PATHS, discoverFeeds, looksLikeFeed } from './discover';
 import { FeedParseError, parseFeed, type ParsedFeed } from './parse';
 import { markBacklogRead } from './backlog';
+import { entryWords } from '../places';
 
 const USER_AGENT =
 	'Mozilla/5.0 (compatible; ReadingList/1.0; +https://reader.nelsonfamily.fyi) FeedFetcher';
@@ -167,6 +168,7 @@ export async function ingestEntries(db: Db, feedId: string, parsed: ParsedFeed):
 		summary: e.summary,
 		content: e.content,
 		imageUrl: e.imageUrl,
+		words: entryWords(e.content, e.summary),
 		publishedAt: e.publishedAt
 	}));
 	const statements = [];

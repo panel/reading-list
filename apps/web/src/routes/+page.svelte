@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import { relativeDay } from '$lib/format';
+	import { minutesLeft, percent } from '$lib/place';
 	import { toast, undoQueueChange } from '$lib/toast.svelte';
 	import type { InboxItem } from '$lib/server/inbox';
 
@@ -102,18 +103,32 @@
 		showingShared ? 'Shared' : (currentCategory ?? current?.title ?? data.folder ?? null)
 	);
 	const showingAll = $derived(!data.feedId && !data.folder && !data.category);
-	/** Chip links keep the chosen order. */
-	const keepSort = $derived(data.sort === 'likely' ? '&sort=likely' : '');
-	/** The query for this view (same filter) in the given order. */
-	const sortQuery = (sort: 'newest' | 'likely') => {
+	type Length = 'short' | 'long' | null;
+	/** Chip links keep the chosen order and length. */
+	const keepSort = $derived(
+		(data.sort === 'likely' ? '&sort=likely' : '') + (data.length ? `&length=${data.length}` : '')
+	);
+	/** The query for this view (same filter) in the given order and length. */
+	const viewQuery = ({
+		sort = data.sort,
+		length = data.length
+	}: {
+		sort?: 'newest' | 'likely';
+		length?: Length;
+	}) => {
 		const params = [
 			data.feedId && `feed=${encodeURIComponent(data.feedId)}`,
 			data.folder && `folder=${encodeURIComponent(data.folder)}`,
 			data.category && `category=${encodeURIComponent(data.category)}`,
-			sort === 'likely' && 'sort=likely'
+			sort === 'likely' && 'sort=likely',
+			length && `length=${length}`
 		].filter(Boolean);
 		return params.length ? `?${params.join('&')}` : '';
 	};
+	const toggle = (active: boolean) =>
+		active
+			? 'font-bold text-ink underline decoration-2 underline-offset-4'
+			: 'text-ink-3 hover:text-ink';
 	const failing = $derived(data.feeds.filter((f) => f.failing));
 	const unreadPosts = $derived(data.inbox.items.filter((i) => i.kind === 'post' && !i.read).length);
 	const empty = $derived(data.feeds.length === 0 && data.inbox.shared === 0);
@@ -216,7 +231,7 @@
 			<ul class="flex gap-2 py-3">
 				<li>
 					<a
-						href="{resolve('/')}{data.sort === 'likely' ? '?sort=likely' : ''}"
+						href="{resolve('/')}{keepSort.replace('&', '?')}"
 						aria-current={showingAll ? 'page' : undefined}
 						class={chip(showingAll)}>All</a
 					>
@@ -265,18 +280,60 @@
 		</nav>
 	{/if}
 
-	{#if !empty && data.inbox.items.length}
-		<p class="flex justify-end gap-3 pb-1 font-ui text-[0.8125rem]" aria-label="Order">
-			{#each [['newest', 'Newest'], ['likely', 'Likely reads']] as const as [value, label] (value)}
-				<a
-					href="{resolve('/')}{sortQuery(value)}"
-					aria-current={data.sort === value ? 'true' : undefined}
-					class={data.sort === value
-						? 'font-bold text-ink underline decoration-2 underline-offset-4'
-						: 'text-ink-3 hover:text-ink'}>{label}</a
-				>
-			{/each}
-		</p>
+	{#if !empty && (data.inbox.items.length || data.inbox.continuing.length || data.length)}
+		<div class="flex flex-wrap justify-between gap-x-3 gap-y-1 pb-1 font-ui text-[0.8125rem]">
+			<p class="flex gap-3" aria-label="Length">
+				{#each [[null, 'Any length'], ['short', 'Short'], ['long', 'Long reads']] as const as [value, label] (label)}
+					<a
+						href="{resolve('/')}{viewQuery({ length: value })}"
+						aria-current={data.length === value ? 'true' : undefined}
+						class={toggle(data.length === value)}>{label}</a
+					>
+				{/each}
+			</p>
+			<p class="flex gap-3" aria-label="Order">
+				{#each [['newest', 'Newest'], ['likely', 'Likely reads']] as const as [value, label] (value)}
+					<a
+						href="{resolve('/')}{viewQuery({ sort: value })}"
+						aria-current={data.sort === value ? 'true' : undefined}
+						class={toggle(data.sort === value)}>{label}</a
+					>
+				{/each}
+			</p>
+		</div>
+	{/if}
+
+	{#if data.inbox.continuing.length}
+		<!-- Long reads left partway: your place is kept, so the rest of the inbox can wait or not. -->
+		<section aria-labelledby="continue-heading" class="mt-2 mb-1 rounded-md bg-sunk px-4 pt-3 pb-1">
+			<h2 id="continue-heading" class="kicker text-[0.6875rem] text-ink-2">Continue reading</h2>
+			<ul>
+				{#each data.inbox.continuing as item (keyFor(item))}
+					{@const done = item.progress ?? 0}
+					<li class="border-b border-rule last:border-b-0">
+						<a href={hrefFor(item)} class="group flex flex-col gap-1.5 py-3">
+							<span class="kicker text-[0.6875rem] text-accent">
+								{#if item.kind === 'shared'}<span class="text-ink-2">Shared ·</span>{/if}
+								{item.source}{item.minutes ? ` · ${minutesLeft(item.minutes, done)} min left` : ''}
+							</span>
+							<span
+								class="line-clamp-2 headline text-[1.1875rem] leading-[1.15] group-hover:text-accent-strong"
+								>{item.title}</span
+							>
+							<span
+								role="progressbar"
+								aria-label="Read so far"
+								aria-valuenow={Math.round(done * 100)}
+								aria-valuemin={0}
+								aria-valuemax={100}
+								class="mt-0.5 h-1 overflow-hidden rounded-full bg-rule"
+								><span class="block h-full bg-accent" style:width={percent(done)}></span></span
+							>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	{/if}
 
 	{#if empty}
@@ -300,9 +357,17 @@
 		</div>
 	{:else if data.inbox.items.length === 0}
 		<p class="py-12 text-center text-[1.0625rem] text-ink-2 italic">
-			{showingShared
-				? 'Nothing shared right now. Links you send in from your phone land here.'
-				: 'Nothing new. Try Refresh.'}
+			{data.length === 'short'
+				? 'No short reads right now.'
+				: data.length === 'long'
+					? data.inbox.continuing.length
+						? 'No other long reads right now.'
+						: 'No long reads right now.'
+					: showingShared
+						? 'Nothing shared right now. Links you send in from your phone land here.'
+						: data.inbox.continuing.length
+							? 'Nothing else new. Try Refresh.'
+							: 'Nothing new. Try Refresh.'}
 		</p>
 	{:else}
 		<ul>
@@ -339,6 +404,10 @@
 										></span>{/if}
 									{#if item.kind === 'shared'}<span class="text-ink-2">Shared ·</span>{/if}
 									{item.source} · {relativeDay(item.date)}
+									{#if item.minutes}<span class="text-ink-2">· {item.minutes} min</span>{/if}
+									{#if item.progress !== null}<span class="text-ink-2"
+											>· {percent(item.progress)} read</span
+										>{/if}
 									{#if item.starred}<span class="text-ink-2">· ★</span>{/if}
 									{#if data.sort === 'likely' && item.pOpen !== null && !item.read}<span
 											class="text-ink-2">· {Math.round(item.pOpen * 100)}% likely</span

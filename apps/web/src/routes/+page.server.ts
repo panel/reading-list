@@ -1,4 +1,4 @@
-import { listCategories } from '@reading-list/core';
+import { listCategories, parseReadLength } from '@reading-list/core';
 import { markAllRead } from '$lib/server/entries';
 import { feedTitle, listSubscriptions, refreshSubscriptions } from '$lib/server/feeds';
 import { getInbox } from '$lib/server/inbox';
@@ -8,9 +8,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const feedId = url.searchParams.get('feed') ?? undefined;
 	const folder = url.searchParams.get('folder') ?? undefined;
 	const category = url.searchParams.get('category') ?? undefined;
-	const sort = url.searchParams.get('sort') === 'likely' ? 'likely' : 'newest';
+	const sort =
+		url.searchParams.get('sort') === 'likely' ? ('likely' as const) : ('newest' as const);
+	const length = parseReadLength(url.searchParams.get('length'));
 	const [inbox, subs, categories] = await Promise.all([
-		getInbox(locals.db, locals.user.id, { feedId, folder, category }, 60, sort),
+		getInbox(locals.db, locals.user.id, { feedId, folder, category, length }, 60, sort),
 		listSubscriptions(locals.db, locals.user.id),
 		listCategories(locals.db, locals.user.id)
 	]);
@@ -20,6 +22,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		folder: folder ?? null,
 		category: category ?? null,
 		sort,
+		length,
 		categories: categories.map(({ slug, name }) => ({ slug, name })),
 		feeds: subs.map(({ feed, titleOverride, folder: feedFolder, unread }) => ({
 			id: feed.id,

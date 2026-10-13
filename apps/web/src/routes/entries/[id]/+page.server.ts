@@ -2,9 +2,14 @@ import { error, fail } from '@sveltejs/kit';
 import {
 	categoriesFor,
 	CategoryError,
+	clearPlace,
+	getPlace,
+	isLongRead,
 	KEEP_CANDIDATE,
 	listCategories,
+	parsePlace,
 	predictionsFor,
+	savePlace,
 	setItemCategory,
 	stripTags
 } from '@reading-list/core';
@@ -37,6 +42,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		entry: { ...entry, content: undefined },
 		html,
 		minutes: readingMinutes(stripTags(entry.content ?? entry.summary ?? '')),
+		// A long read keeps your place, so you can leave it partway and come back.
+		long: isLongRead(entry.words),
+		place: await getPlace(locals.db, locals.user.id, 'post', entry.id),
 		next: await nextInboxItem(locals.db, locals.user.id, entry.id),
 		categories: (await listCategories(locals.db, locals.user.id)).map(({ slug, name }) => ({
 			slug,
@@ -75,6 +83,20 @@ export const actions: Actions = {
 			await markRead(locals.db, locals.user.id, params.id, read);
 		}
 		return { read };
+	},
+
+	/** Where you are in a long read (block, progress), or `finished` to clear it. */
+	place: async ({ locals, params, request }) => {
+		const form = await request.formData();
+		if (!(await getEntry(locals.db, locals.user.id, params.id))) return fail(404);
+		if (form.get('finished') === 'true') {
+			await clearPlace(locals.db, locals.user.id, 'post', params.id);
+			return { place: null };
+		}
+		const place = parsePlace({ block: form.get('block'), progress: form.get('progress') });
+		if (!place) return fail(400, { message: 'Invalid place.' });
+		await savePlace(locals.db, locals.user.id, 'post', params.id, place);
+		return { place };
 	},
 
 	/** Copy link: records the citation on the post, and on its link if it's saved. */

@@ -20,6 +20,8 @@ export interface Toast {
 	message: string;
 	/** When set, the toast offers Undo. */
 	undo?: Undo;
+	/** A button that runs in the page instead, e.g. "Start over". */
+	action?: { label: string; run: () => void };
 }
 
 const DURATION_MS = 6000;

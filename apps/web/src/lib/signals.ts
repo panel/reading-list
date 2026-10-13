@@ -3,16 +3,22 @@ import { resolve } from '$app/paths';
 
 /**
  * Posts to a page's form action from script, the way the readers record that
- * something was opened. Resolves true if the action succeeded.
+ * something was opened. Resolves true if the action succeeded. `keepalive`
+ * lets it finish after the page is hidden or left (saving your place).
  */
-export async function postAction(path: string, fields: Record<string, string> = {}) {
+export async function postAction(
+	path: string,
+	fields: Record<string, string> = {},
+	{ keepalive = false } = {}
+) {
 	const body = new FormData();
 	for (const [name, value] of Object.entries(fields)) body.set(name, value);
 	try {
 		const response = await fetch(path, {
 			method: 'POST',
 			body,
-			headers: { 'x-sveltekit-action': 'true' }
+			headers: { 'x-sveltekit-action': 'true' },
+			keepalive
 		});
 		return deserialize(await response.text()).type === 'success';
 	} catch {

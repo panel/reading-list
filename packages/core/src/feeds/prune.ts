@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db';
+import { prunePlaces } from '../places';
 
 export interface PruneOptions {
 	/** Only posts older than this are removed. */
@@ -19,13 +20,15 @@ export interface PruneOptions {
  * for removed posts goes with them (ON DELETE CASCADE), but what each user did
  * with them (opened, cited, dismissed) is first copied to entry_history, so
  * Slice 12's record of what was read and what was skipped outlives the posts.
- * Saved links are separate rows and are never touched.
+ * Saved links are separate rows and are never touched, and neither are posts
+ * you're partway through (a reading place), until the place is forgotten.
  */
 export async function pruneEntries(
 	db: Db,
 	{ olderThanDays = 30, keepPerFeed = 50, now = new Date() }: PruneOptions = {}
 ) {
 	const cutoff = now.getTime() - olderThanDays * 24 * 60 * 60 * 1000;
+	const places = await prunePlaces(db, now);
 	const doomed = sql`
 		select c.id from (
 			select fe.id,
@@ -37,7 +40,9 @@ export async function pruneEntries(
 			from feed_entries fe
 		) c
 		where c.rn > ${keepPerFeed} and c.d < ${cutoff}
-			and not exists (select 1 from links l where l.source_entry_id = c.id)`;
+			and not exists (select 1 from links l where l.source_entry_id = c.id)
+			and not exists (select 1 from reading_places rp
+				where rp.item_kind = 'post' and rp.item_id = c.id)`;
 	await db.run(sql`
 		insert into entry_history (user_id, entry_id, feed_id, url, title, author, published_at,
 			read_at, opened_at, cited_at, dismissed_at, pruned_at)
@@ -57,5 +62,5 @@ export async function pruneEntries(
 		delete from feeds
 		where not exists (select 1 from subscriptions s where s.feed_id = feeds.id)
 		returning id`);
-	return { entries: entries.length, feeds: feeds.length };
+	return { entries: entries.length, feeds: feeds.length, places };
 }

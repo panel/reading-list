@@ -9,6 +9,8 @@
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import ReadAloud from '$lib/components/ReadAloud.svelte';
+	import ReadingPlace from '$lib/components/ReadingPlace.svelte';
+	import { percent, STARTED } from '$lib/place';
 	import { hostname, relativeDay } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 
@@ -28,6 +30,10 @@
 	let starForm = $state<HTMLFormElement>();
 	let article = $state<HTMLElement>();
 	let editingNote = $state(false);
+	/** How far into the article you are, for the progress line. */
+	let progress = $state(0);
+	// Partway into a long read, moving on leaves it in progress: say so.
+	const partway = $derived(data.long && progress >= STARTED && progress < 1);
 	let noteForm = $state<HTMLFormElement>();
 
 	// Lift toasts above this page's fixed action bar.
@@ -123,7 +129,9 @@
 
 		<header class="flex flex-col gap-3 pt-3">
 			<div class="kicker text-accent">
-				{entry.feedTitle} · {data.minutes} min read
+				{entry.feedTitle} · {data.minutes} min read{#if data.place}<span class="text-ink-3">
+						· {percent(data.place.progress)} read</span
+					>{/if}
 			</div>
 			<h1 class="headline text-[2.375rem] leading-[1.04] tracking-[-0.018em] lg:text-[3.25rem]">
 				{entry.title ?? 'Untitled'}
@@ -164,6 +172,16 @@
 			</div>
 		{:else if entry.summary}
 			<p bind:this={article} class="prose mt-6">{entry.summary}</p>
+		{/if}
+
+		{#if data.html || entry.summary}
+			<ReadingPlace
+				target={article}
+				action="{resolve('/entries/[id]', { id: entry.id })}?/place"
+				saved={data.place}
+				enabled={data.long}
+				bind:progress
+			/>
 		{/if}
 
 		<div aria-hidden="true" class="mt-6 text-center text-sm tracking-[0.4em] text-accent">■</div>
@@ -316,6 +334,14 @@
 <div
 	class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-rule bg-paper/95 backdrop-blur lg:bottom-0"
 >
+	{#if data.long}
+		<!-- How far you are: a long read keeps your place when you leave it. -->
+		<div
+			aria-hidden="true"
+			class="absolute -top-px left-0 h-0.5 bg-accent"
+			style:width="{progress * 100}%"
+		></div>
+	{/if}
 	<div class="mx-auto flex max-w-[44rem] gap-2 px-3.5 py-2.5">
 		<form bind:this={starForm} method="POST" action="?/star" use:enhance={star}>
 			<input type="hidden" name="starred" value={String(!starred)} />
@@ -365,7 +391,7 @@
 		<a
 			href={nextHref}
 			class="flex h-12.5 flex-1 items-center justify-center rounded-md bg-ink font-ui text-[0.9375rem] font-bold text-paper hover:bg-accent-strong"
-			>{data.next ? 'Next →' : 'Back to inbox'}</a
+			>{partway ? 'Finish later →' : data.next ? 'Next →' : 'Back to inbox'}</a
 		>
 	</div>
 </div>

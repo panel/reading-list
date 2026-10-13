@@ -1,5 +1,6 @@
 // xss is CommonJS: Vite's SSR build only exposes its default export.
 import xss from 'xss';
+import { countWords, readingMinutes as minutesFor } from '@reading-list/core';
 
 const { FilterXSS, escapeAttrValue } = xss as unknown as typeof import('xss');
 
@@ -117,10 +118,7 @@ export function sanitizeEntryHtml(html: string, baseUrl: string | null): string 
 }
 
 /** Rough reading time for a post, in minutes (230 words a minute). */
-export function readingMinutes(text: string): number {
-	const words = text.split(/\s+/).filter(Boolean).length;
-	return Math.max(1, Math.round(words / 230));
-}
+export const readingMinutes = (text: string) => minutesFor(countWords(text));
 
 /**
  * The reader shows a post's lead image above the headline. When the post
