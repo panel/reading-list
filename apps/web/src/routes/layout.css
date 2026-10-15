@@ -139,6 +139,14 @@
 	.prose :is(h4, h5, h6) {
 		font-size: 1.05em;
 	}
+	/* Passages you highlighted (Highlights, via CSS Custom Highlights). */
+	.prose::highlight(saved-highlight) {
+		background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+		text-decoration: underline;
+		text-decoration-color: var(--color-accent);
+		text-decoration-thickness: 2px;
+		text-underline-offset: 0.2em;
+	}
 	/* The paragraph being read aloud (ReadAloud). */
 	.prose .reading-now {
 		background: var(--color-sunk);

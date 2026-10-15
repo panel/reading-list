@@ -1,5 +1,11 @@
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
-import { canonicalizeUrl, parseHttpUrl, parseTags, ulid } from '@reading-list/core';
+import {
+	canonicalizeUrl,
+	deleteHighlightsFor,
+	parseHttpUrl,
+	parseTags,
+	ulid
+} from '@reading-list/core';
 import { links, linkTags, tags, type Db, type Link } from '@reading-list/core/db';
 import { fetchPageMetadata } from './metadata';
 
@@ -277,6 +283,7 @@ export async function setTags(db: Db, userId: string, id: string, input: string)
 
 export async function deleteLink(db: Db, userId: string, id: string): Promise<boolean> {
 	const deleted = await db.delete(links).where(ownLink(userId, id)).returning({ id: links.id });
+	if (deleted.length) await deleteHighlightsFor(db, userId, 'link', id);
 	return deleted.length > 0;
 }
 

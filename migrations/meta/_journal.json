@@ -120,6 +120,13 @@
       "when": 1791935338519,
       "tag": "0016_reading_places",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792101789394,
+      "tag": "0017_highlights",
+      "breakpoints": true
     }
   ]
 }

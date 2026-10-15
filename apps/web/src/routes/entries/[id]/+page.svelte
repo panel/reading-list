@@ -7,6 +7,7 @@
 	import { citeEntry, postAction } from '$lib/signals';
 	import { resolve } from '$app/paths';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
+	import Highlights from '$lib/components/Highlights.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import ReadAloud from '$lib/components/ReadAloud.svelte';
 	import ReadingPlace from '$lib/components/ReadingPlace.svelte';
@@ -185,6 +186,14 @@
 		{/if}
 
 		<div aria-hidden="true" class="mt-6 text-center text-sm tracking-[0.4em] text-accent">■</div>
+
+		{#if data.html || entry.summary}
+			<Highlights
+				target={article}
+				page={resolve('/entries/[id]', { id: entry.id })}
+				highlights={data.highlights}
+			/>
+		{/if}
 
 		{#if original && host}
 			<a

@@ -31,6 +31,7 @@ import {
 	setTags,
 	starLink
 } from '$lib/server/links';
+import { highlightActions, readerHighlights } from '$lib/server/highlights';
 import { nextInboxItem } from '$lib/server/inbox';
 import { readingMinutes, sanitizeEntryHtml, withoutOpeningImage } from '$lib/server/sanitize';
 import type { Actions, PageServerLoad } from './$types';
@@ -43,14 +44,15 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: url.searchParams.has('updated')
 			? 'updated'
 			: null;
-	const [next, entry, archive, categories, placed, scores, place] = await Promise.all([
+	const [next, entry, archive, categories, placed, scores, place, highlights] = await Promise.all([
 		nextInboxItem(locals.db, locals.user.id, link.id),
 		entryForLink(locals.db, locals.user.id, link),
 		getArchive(locals.db, link.id),
 		listCategories(locals.db, locals.user.id),
 		categoriesFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }]),
 		predictionsFor(locals.db, locals.user.id, [{ kind: 'link', id: link.id }]),
-		getPlace(locals.db, locals.user.id, 'link', link.id)
+		getPlace(locals.db, locals.user.id, 'link', link.id),
+		readerHighlights(locals.db, locals.user.id, 'link', link.id)
 	]);
 	// Read in the app: the saved copy, else the matching post from a feed you follow.
 	const source =
@@ -76,6 +78,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 					// A long read keeps your place, so you can leave it partway and come back.
 					long: isLongRead(archive?.status === 'ready' ? archive.words : countWords(source!.text)),
 					place,
+					highlights,
 					kicker: entry?.feedTitle ?? siteLabel(link),
 					author: entry?.author ?? link.author,
 					date: entry ? (entry.publishedAt ?? entry.createdAt) : null,
@@ -102,6 +105,11 @@ const notFound = () => fail(404, { message: 'That link doesn’t exist any more.
  * doesn't redirect: the inbox posts here too and stays where it is.
  */
 export const actions: Actions = {
+	...highlightActions('link', async ({ locals, params }) => {
+		const link = await getLink(locals.db, locals.user.id, params.id!);
+		return link && { id: link.id, title: link.title, url: link.url };
+	}),
+
 	// Posted by the page once it's open (not in load, so hover-preloading doesn't count).
 	opened: async ({ locals, params }) => {
 		await markLinkOpened(locals.db, locals.user.id, params.id);

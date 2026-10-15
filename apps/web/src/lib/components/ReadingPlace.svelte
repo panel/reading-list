@@ -7,7 +7,7 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import {
-		BLOCKS,
+		articleBlocks,
 		countWords,
 		currentBlock,
 		progressAt,
@@ -37,13 +37,6 @@
 		progress?: number;
 	} = $props();
 
-	function blocks(root: HTMLElement) {
-		const found = [...root.querySelectorAll<HTMLElement>(BLOCKS)].filter(
-			(el) => !el.querySelector(BLOCKS) && !el.parentElement?.closest('pre')
-		);
-		return found.length ? found : [root];
-	}
-
 	/** Lines the block up at the top of the window. */
 	const scrollToBlock = (el: HTMLElement) =>
 		window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - TOP_PX });
@@ -52,7 +45,7 @@
 	afterNavigate(({ type }) => {
 		if (!enabled || !target || !saved || saved.block === 0 || type === 'popstate') return;
 		if (window.scrollY > 40) return;
-		const list = blocks(target);
+		const list = articleBlocks(target);
 		const el = list[Math.min(saved.block, list.length - 1)];
 		scrollToBlock(el);
 		// Images above it load late and push it down; keep it in place until you scroll.
@@ -86,7 +79,7 @@
 		const url = action;
 		if (!root) return;
 		const keep = untrack(() => enabled);
-		const list = blocks(root);
+		const list = articleBlocks(root);
 		const words = list.map((el) => countWords(el.textContent ?? ''));
 		// What's been saved, so an unchanged place isn't posted again.
 		let savedBlock = untrack(() => saved?.block ?? -1);

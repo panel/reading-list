@@ -24,9 +24,14 @@
 				{data.facets.total === 1 ? 'reference' : 'references'} · the links you keep coming back to
 			</p>
 		</div>
-		<a href={resolve('/archive')} class="font-ui text-sm font-bold text-accent hover:underline"
-			>Archive →</a
-		>
+		<div class="flex gap-4">
+			<a href={resolve('/highlights')} class="font-ui text-sm font-bold text-accent hover:underline"
+				>Highlights →</a
+			>
+			<a href={resolve('/archive')} class="font-ui text-sm font-bold text-accent hover:underline"
+				>Archive →</a
+			>
+		</div>
 	</header>
 
 	<form method="GET" role="search" class="mt-4 flex gap-2">

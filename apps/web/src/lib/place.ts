@@ -8,6 +8,14 @@
 /** What counts as a block, innermost first (as Read to me reads them), plus code. */
 export const BLOCKS = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, dt, dd, pre';
 
+/** The article's text blocks, innermost only (a list item, not its list); the whole article if none. */
+export function articleBlocks(root: HTMLElement): HTMLElement[] {
+	const found = [...root.querySelectorAll<HTMLElement>(BLOCKS)].filter(
+		(el) => !el.querySelector(BLOCKS) && !el.parentElement?.closest('pre')
+	);
+	return found.length ? found : [root];
+}
+
 /** Read this far in before it counts as in progress (a glance at the top doesn't). */
 export const STARTED = 0.05;
 

@@ -21,7 +21,8 @@ export interface PruneOptions {
  * with them (opened, cited, dismissed) is first copied to entry_history, so
  * Slice 12's record of what was read and what was skipped outlives the posts.
  * Saved links are separate rows and are never touched, and neither are posts
- * you're partway through (a reading place), until the place is forgotten.
+ * you're partway through (a reading place), until the place is forgotten, or
+ * posts you highlighted.
  */
 export async function pruneEntries(
 	db: Db,
@@ -42,7 +43,9 @@ export async function pruneEntries(
 		where c.rn > ${keepPerFeed} and c.d < ${cutoff}
 			and not exists (select 1 from links l where l.source_entry_id = c.id)
 			and not exists (select 1 from reading_places rp
-				where rp.item_kind = 'post' and rp.item_id = c.id)`;
+				where rp.item_kind = 'post' and rp.item_id = c.id)
+			and not exists (select 1 from highlights h
+				where h.item_kind = 'post' and h.item_id = c.id)`;
 	await db.run(sql`
 		insert into entry_history (user_id, entry_id, feed_id, url, title, author, published_at,
 			read_at, opened_at, cited_at, dismissed_at, pruned_at)

@@ -117,3 +117,17 @@ export {
 	type PlaceKind,
 	type ReadLength
 } from './places';
+export {
+	addHighlight,
+	countHighlights,
+	deleteHighlight,
+	deleteHighlightsFor,
+	HIGHLIGHT_MAX_CHARS,
+	HIGHLIGHT_NOTE_MAX_CHARS,
+	highlightsFor,
+	listHighlights,
+	parseHighlight,
+	parseHighlightNote,
+	setHighlightNote,
+	type HighlightInput
+} from './highlights';

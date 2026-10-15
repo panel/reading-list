@@ -703,6 +703,29 @@ hand.
   Short showed only short posts, reopening returned to the same paragraph, and reading to
   the end took it off the shelf.
 
+### Highlights
+*"Highlight a passage while I read and keep it, with a note if I have one."*
+- **In the readers** (posts, and saved links with a readable copy): select text in the
+  article and a **Highlight** button appears above the action bar (clear of the phone's
+  own copy menu). It opens a sheet with the passage and an optional note. A selection
+  across paragraphs or list items keeps one line per block, and list items keep their
+  bullet or number ("1.", "•"); part of a single block is just its text.
+  Logic: `lib/highlight.ts`, `lib/components/Highlights.svelte`.
+- **Saved** (`highlights`, migration 0017): the text, the note, the block it starts in,
+  when it was saved, and the article's title and URL (so the list reads on its own).
+- **Shown** in the text with a tint and underline (CSS Custom Highlights; the article
+  HTML isn't touched), found again from its block, or anywhere if the article moved. After
+  the article, **Your highlights** lists each with its note and time: Show, Edit note,
+  Delete. **Highlights** (`/highlights`, linked from the Library) lists them all, newest
+  first, grouped by article, with Copy (the passage, then title and URL).
+- **Housekeeping:** a highlighted post isn't pruned; deleting a link deletes its
+  highlights.
+- **Not yet:** highlights in search, the reading digest and MCP, and in exports.
+- **Status: built.** Checked on the local dev server in a phone-sized browser: a selection
+  from a paragraph into a numbered list saved with its numbers and a note, part of a
+  bullet saved without one, both marked again after a reload, note edited, one deleted,
+  and both listed on the Highlights page.
+
 ### Later / optional slices (pick by appetite)
 - **Snapshot images:** copy starred links' images to R2 so dead images don't break
   the library (Slice 11 keeps text only).

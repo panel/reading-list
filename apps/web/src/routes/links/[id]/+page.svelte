@@ -5,6 +5,7 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import Favicon from '$lib/components/Favicon.svelte';
+	import Highlights from '$lib/components/Highlights.svelte';
 	import LinkImage from '$lib/components/LinkImage.svelte';
 	import ReadAloud from '$lib/components/ReadAloud.svelte';
 	import ReadingPlace from '$lib/components/ReadingPlace.svelte';
@@ -405,6 +406,11 @@
 			bind:progress
 		/>
 		<div aria-hidden="true" class="mt-2 text-center text-sm tracking-[0.4em] text-accent">■</div>
+		<Highlights
+			target={article}
+			page={resolve('/links/[id]', { id: link.id })}
+			highlights={data.reader.highlights}
+		/>
 		<a
 			href={link.url}
 			target="_blank"

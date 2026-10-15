@@ -447,6 +447,37 @@ export const readingPlaces = sqliteTable(
 	]
 );
 
+/**
+ * Passages you highlighted in a reader, with an optional note. Like a reading
+ * place, it points at a post or a link (no FK, so it can point at either); the
+ * title and URL are copied in so the list of highlights reads on its own.
+ */
+export const highlights = sqliteTable(
+	'highlights',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemKind: text('item_kind', { enum: ['post', 'link'] }).notNull(),
+		itemId: text('item_id').notNull(),
+		/** The passage as plain text; list items keep their bullets or numbers, one per line. */
+		text: text('text').notNull(),
+		note: text('note'),
+		/** The article block (paragraph, list item…) it starts in, to find it again. */
+		block: integer('block').notNull().default(0),
+		title: text('title'),
+		url: text('url'),
+		createdAt: timestampNow('created_at'),
+		updatedAt: timestampNow('updated_at')
+	},
+	(t) => [
+		index('highlights_user_item').on(t.userId, t.itemKind, t.itemId),
+		index('highlights_user_created').on(t.userId, t.createdAt),
+		check('highlights_item_kind', sql`${t.itemKind} IN ('post', 'link')`)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Link = typeof links.$inferSelect;
 export type NewLink = typeof links.$inferInsert;
@@ -460,3 +491,4 @@ export type LinkArchive = typeof linkArchives.$inferSelect;
 export type Prediction = typeof predictions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type ReadingPlace = typeof readingPlaces.$inferSelect;
+export type Highlight = typeof highlights.$inferSelect;

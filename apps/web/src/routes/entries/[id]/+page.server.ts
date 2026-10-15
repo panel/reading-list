@@ -23,6 +23,7 @@ import {
 	markRead,
 	setDismissed
 } from '$lib/server/entries';
+import { highlightActions, readerHighlights } from '$lib/server/highlights';
 import { nextInboxItem } from '$lib/server/inbox';
 import { citeLink, getLink, starLink } from '$lib/server/links';
 import { readingMinutes, sanitizeEntryHtml, withoutOpeningImage } from '$lib/server/sanitize';
@@ -45,6 +46,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		// A long read keeps your place, so you can leave it partway and come back.
 		long: isLongRead(entry.words),
 		place: await getPlace(locals.db, locals.user.id, 'post', entry.id),
+		highlights: await readerHighlights(locals.db, locals.user.id, 'post', entry.id),
 		next: await nextInboxItem(locals.db, locals.user.id, entry.id),
 		categories: (await listCategories(locals.db, locals.user.id)).map(({ slug, name }) => ({
 			slug,
@@ -69,6 +71,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 };
 
 export const actions: Actions = {
+	...highlightActions('post', async ({ locals, params }) => {
+		const entry = await getEntry(locals.db, locals.user.id, params.id!);
+		return entry && { id: entry.id, title: entry.title, url: entry.url ?? entry.siteUrl };
+	}),
+
 	// Posted by the page once it's open, rather than marked in load, so that
 	// hover-preloading a post in the list doesn't count as reading it.
 	// `opened` comes from the page itself (not the Mark read button) and also
