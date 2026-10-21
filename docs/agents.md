@@ -61,7 +61,7 @@ Adding OAuth would be its own piece of work.
 | `list_queue` | `links:read` | Shared links still to read (the inbox's Shared feed), newest first |
 | `list_recent_reading` | `links:read` | What you read and reacted to in the last `days` (default 14, up to 90), strongest reaction first: see [The reading digest](#the-reading-digest) |
 | `get_post_interview_guide` | none | How to interview you about your reading and help you write a LinkedIn post |
-| `get_link` | `links:read` | One link with note and tags, plus its saved readable copy's `text` when there is one |
+| `get_link` | `links:read` | One link with its `notes` and tags, plus its saved readable copy's `text` when there is one |
 | `save_link` | `links:write` | Save a URL with a note and tags. Saving one that already exists merges the note and tags |
 | `update_link` | `links:write` | Replace or append to the note, replace tags, set `status` (`queued`/`archived`), star or unstar |
 | `list_feeds` | `feeds:read` | Followed feeds with unread counts |
@@ -116,19 +116,43 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "content-type: application/js
 | `403` | The token lacks the scope (`message` names it) |
 | `404` | No such link or post |
 
+## Notes and highlights
+
+To an agent, highlights are notes. Every link and post an agent gets back
+(from any tool, and the REST API) has `notes`, a list of everything you wrote
+or marked on that article, in the order you saved it:
+
+```json
+"notes": [
+  { "quote": null, "text": "Worth citing on test design.", "at": "2026-10-20T09:30:00.000Z" },
+  { "quote": "1. Test behavior, not implementation.\n2. Keep each test small.", "text": "The core of it", "at": "2026-10-20T09:12:00.000Z" },
+  { "quote": "Slow suites get skipped.", "text": null, "at": "2026-10-20T09:14:00.000Z" }
+]
+```
+
+- `quote: null` is the link's own note (the one `update_link` edits); its `at`
+  is when the link last changed.
+- A `quote` is a passage you highlighted; `text` is your note on it, or null.
+  Lists keep their numbers or bullets, one item per line.
+- A post and the link it was saved as are one article, so their notes are
+  gathered together. Notes from the link need `links:read`.
+- Highlights are made in the app; agents can read them but not add or change
+  them.
+
 ## The reading digest
 
 `list_recent_reading` (and `GET /api/reading`) lists what you actually did
 something with lately, not everything that passed through your inbox:
 
-- saved links you finished, starred, opened, shared (copied the link) or wrote
-  a note on in that window
-- feed posts you opened or shared, if the token has `feeds:read`. A post you
-  saved or starred appears once, as its link
+- saved links you finished, starred, opened, shared (copied the link), wrote
+  a note on or highlighted in that window
+- feed posts you opened, shared or highlighted, if the token has `feeds:read`.
+  A post you saved or starred appears once, as its link
 
-Each item has your `note`, `tags`, `category`, the `reasons` it's there (`"wrote
-a note"`, `"starred it"`, `"shared the link 2×"`, `"opened it"`, `"finished
-it"`) and a `score` it's ranked by: a note or a star counts 3, each share 2 (up
+Each item has your `notes` (see below), `tags`, `category`, the `reasons` it's there (`"wrote
+a note"`, `"highlighted 2 passages"`, `"starred it"`, `"shared the link 2×"`,
+`"opened it"`, `"finished it"`) and a `score` it's ranked by: a note (or any
+highlights) or a star counts 3, each share 2 (up
 to three), an open 1 and Done ½. Use `get_link` or `read_entry` with its `id`
 for the full text.
 

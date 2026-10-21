@@ -30,7 +30,9 @@ const listFields = {
 	// Set when the post was saved or starred from the feed.
 	linkId: links.id,
 	linkStatus: links.status,
-	linkIsReference: links.isReference
+	linkIsReference: links.isReference,
+	linkNote: links.note,
+	linkUpdatedAt: links.updatedAt
 };
 
 function subscribedEntries(db: Db, userId: string) {

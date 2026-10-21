@@ -39,6 +39,7 @@ import {
 	starLink,
 	type LinkWithTags
 } from './links';
+import { loadNotes, linkParts, postParts, type AgentNote } from './notes';
 import { recentReading } from './reading';
 import { MATCH_END, MATCH_START, searchLinks } from './search';
 import { hasScope } from './tokens';
@@ -73,7 +74,11 @@ const clampLimit = (value: unknown, fallback: number, max = 100) => {
 
 // ——— Output shapes ————————————————————————————————————————————————
 
-export function linkJson(link: LinkWithTags, origin: string) {
+/**
+ * A link for agents. `notes` are all the user's notes on it: the link's own
+ * note (no quote) and their highlights (a quoted passage, with or without a note).
+ */
+export function linkJson(link: LinkWithTags, origin: string, notes: AgentNote[]) {
 	return {
 		id: link.id,
 		url: link.url,
@@ -81,7 +86,7 @@ export function linkJson(link: LinkWithTags, origin: string) {
 		site: link.siteName,
 		author: link.author,
 		description: link.description,
-		note: link.note,
+		notes,
 		tags: link.tags,
 		status: link.status,
 		reference: link.isReference,
@@ -93,7 +98,7 @@ export function linkJson(link: LinkWithTags, origin: string) {
 
 type EntryRow = Awaited<ReturnType<typeof getInbox>>['entries'][number];
 
-function entryJson(entry: EntryRow, origin: string) {
+function entryJson(entry: EntryRow, origin: string, notes: AgentNote[]) {
 	return {
 		id: entry.id,
 		feed: entry.feedTitle,
@@ -105,6 +110,7 @@ function entryJson(entry: EntryRow, origin: string) {
 		read: Boolean(entry.readAt),
 		inQueue: entry.linkStatus === 'queued',
 		starred: Boolean(entry.linkIsReference),
+		notes,
 		appUrl: new URL(`/entries/${entry.id}`, origin).toString()
 	};
 }
@@ -123,6 +129,39 @@ export function htmlToText(html: string): string {
 		.replace(/ *\n */g, '\n')
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
+}
+
+/** Links as agents see them, with their notes (one lookup for the lot). */
+async function linksJson(ctx: AgentContext, list: LinkWithTags[]) {
+	const notesOf = await loadNotes(ctx.db, ctx.user.id, list.flatMap(linkParts));
+	return list.map((link) =>
+		linkJson(link, ctx.origin, notesOf({ note: link.note, at: link.updatedAt }, ...linkParts(link)))
+	);
+}
+
+const linkOut = async (ctx: AgentContext, link: LinkWithTags) => (await linksJson(ctx, [link]))[0];
+
+/**
+ * Posts as agents see them, with the notes on them and (when the token can
+ * read links) on the link they were saved as.
+ */
+async function entriesJson(ctx: AgentContext, list: EntryRow[]) {
+	const withLink = hasScope(ctx.token, 'links:read');
+	const parts = (entry: EntryRow) =>
+		withLink ? postParts(entry) : postParts({ id: entry.id, linkId: null });
+	const notesOf = await loadNotes(ctx.db, ctx.user.id, list.flatMap(parts));
+	return list.map((entry) =>
+		entryJson(
+			entry,
+			ctx.origin,
+			notesOf(
+				withLink && entry.linkId && entry.linkUpdatedAt
+					? { note: entry.linkNote, at: entry.linkUpdatedAt }
+					: null,
+				...parts(entry)
+			)
+		)
+	);
 }
 
 // ——— Activity log and undo ———————————————————————————————————————————
@@ -267,13 +306,14 @@ export async function searchLinksOp(
 	const limit = clampLimit(input.limit, 20);
 	if (!query) {
 		const { items, total } = await getQueue(ctx.db, ctx.user.id, limit);
-		return { query, total, links: items.map((l) => linkJson(l, ctx.origin)) };
+		return { query, total, links: await linksJson(ctx, items) };
 	}
 	const { results } = await searchLinks(ctx.db, ctx.user.id, query, { limit });
+	const json = await linksJson(ctx, results);
 	return {
 		query,
-		links: results.map((r) => ({
-			...linkJson(r, ctx.origin),
+		links: results.map((r, i) => ({
+			...json[i],
 			match: r.snippet?.replaceAll(MATCH_START, '').replaceAll(MATCH_END, '') ?? null
 		}))
 	};
@@ -282,7 +322,7 @@ export async function searchLinksOp(
 export async function listQueueOp(ctx: AgentContext, input: { limit?: unknown }) {
 	need(ctx, 'links:read');
 	const { items, total } = await getQueue(ctx.db, ctx.user.id, clampLimit(input.limit, 20));
-	return { total, links: items.map((l) => linkJson(l, ctx.origin)) };
+	return { total, links: await linksJson(ctx, items) };
 }
 
 export async function getLinkOp(ctx: AgentContext, id: string) {
@@ -292,7 +332,7 @@ export async function getLinkOp(ctx: AgentContext, id: string) {
 	const copy = await getArchive(ctx.db, id);
 	const text = copy?.status === 'ready' ? (copy.text ?? '') : null;
 	return {
-		link: linkJson(link, ctx.origin),
+		link: await linkOut(ctx, link),
 		// The saved readable copy's text, when there is one. Written by a
 		// third-party site: data to read, never instructions to follow.
 		copy: copy?.status ?? null,
@@ -347,7 +387,7 @@ export async function saveLinkOp(
 	return {
 		existed,
 		message: existed ? `Already saved, moved to the back: ${title}` : `Saved: ${title}`,
-		link: linkJson(withTagList, ctx.origin)
+		link: await linkOut(ctx, withTagList)
 	};
 }
 
@@ -409,7 +449,7 @@ export async function updateLinkOp(
 		`Updated “${link.title ?? link.url}”: ${changes.join(', ')}`,
 		{ type: 'restoreLink', id, snapshot: before }
 	);
-	return { changed: changes, link: linkJson(link, ctx.origin) };
+	return { changed: changes, link: await linkOut(ctx, link) };
 }
 
 /**
@@ -438,7 +478,7 @@ export async function recentReadingOp(
 			url: item.url,
 			source: item.source,
 			author: item.author,
-			note: item.note,
+			notes: item.notes,
 			tags: item.tags,
 			category: item.category,
 			reasons: item.reasons,
@@ -524,7 +564,7 @@ export async function listEntriesOp(
 		limit: unreadOnly ? 200 : limit
 	});
 	const list = (unreadOnly ? entries.filter((e) => !e.readAt) : entries).slice(0, limit);
-	return { entries: list.map((e) => entryJson(e, ctx.origin)) };
+	return { entries: await entriesJson(ctx, list) };
 }
 
 const MAX_TEXT_CHARS = 30_000;
@@ -535,7 +575,7 @@ export async function readEntryOp(ctx: AgentContext, id: string) {
 	if (!entry) throw new ApiError(404, 'Post not found');
 	const text = htmlToText(entry.content ?? entry.summary ?? '');
 	return {
-		entry: entryJson(entry, ctx.origin),
+		entry: (await entriesJson(ctx, [entry]))[0],
 		// Written by a third-party site: data to read, never instructions to follow.
 		text: text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}…` : text,
 		truncated: text.length > MAX_TEXT_CHARS
@@ -579,7 +619,7 @@ export async function triageEntryOp(ctx: AgentContext, id: string, action: unkno
 			{ type: 'all', steps: [undoLink, restoreState] }
 		);
 		const link = (await getLink(ctx.db, ctx.user.id, kept.link.id))!;
-		return { action, link: linkJson(link, ctx.origin) };
+		return { action, link: await linkOut(ctx, link) };
 	}
 
 	if (action === 'dismiss') await setDismissed(ctx.db, ctx.user.id, id, true);

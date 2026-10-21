@@ -6,6 +6,8 @@
 export interface ReadingSignals {
 	/** They wrote a note on it: their own words, the strongest sign there is. */
 	note: boolean;
+	/** Passages they highlighted, which count like a note. */
+	highlights?: number;
 	starred: boolean;
 	/** Times they copied its link to share or cite it. */
 	cites: number;
@@ -17,7 +19,7 @@ export interface ReadingSignals {
 /** Higher means a stronger reaction. Ranks the digest. */
 export function reactionScore(s: ReadingSignals): number {
 	return (
-		(s.note ? 3 : 0) +
+		(s.note || (s.highlights ?? 0) > 0 ? 3 : 0) +
 		(s.starred ? 3 : 0) +
 		Math.min(s.cites, 3) * 2 +
 		(s.opened ? 1 : 0) +
@@ -29,6 +31,9 @@ export function reactionScore(s: ReadingSignals): number {
 export function reactionReasons(s: ReadingSignals): string[] {
 	const reasons: string[] = [];
 	if (s.note) reasons.push('wrote a note');
+	const marked = s.highlights ?? 0;
+	if (marked > 0)
+		reasons.push(marked === 1 ? 'highlighted a passage' : `highlighted ${marked} passages`);
 	if (s.starred) reasons.push('starred it');
 	if (s.cites > 0) reasons.push(s.cites === 1 ? 'shared the link' : `shared the link ${s.cites}×`);
 	if (s.opened) reasons.push('opened it');

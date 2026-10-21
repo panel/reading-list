@@ -13,6 +13,12 @@ describe('reactionScore', () => {
 		expect(done).toBeGreaterThan(reactionScore(none));
 	});
 
+	it('counts highlights like a note, once', () => {
+		const noted = reactionScore({ ...none, note: true });
+		expect(reactionScore({ ...none, highlights: 1 })).toBe(noted);
+		expect(reactionScore({ ...none, note: true, highlights: 4 })).toBe(noted);
+	});
+
 	it('caps the weight of repeated shares', () => {
 		expect(reactionScore({ ...none, cites: 10 })).toBe(reactionScore({ ...none, cites: 3 }));
 	});
@@ -28,5 +34,10 @@ describe('reactionReasons', () => {
 			'finished it'
 		]);
 		expect(reactionReasons(none)).toEqual([]);
+		expect(reactionReasons({ ...none, highlights: 1 })).toEqual(['highlighted a passage']);
+		expect(reactionReasons({ ...none, note: true, highlights: 3 })).toEqual([
+			'wrote a note',
+			'highlighted 3 passages'
+		]);
 	});
 });

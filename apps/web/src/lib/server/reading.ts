@@ -19,6 +19,7 @@ import {
 	type Db
 } from '@reading-list/core/db';
 import { withTags } from './links';
+import { loadNotes, linkParts, type AgentNote } from './notes';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -31,6 +32,8 @@ export interface ReadingItem {
 	source: string | null;
 	author: string | null;
 	note: string | null;
+	/** All the user's notes on it, highlights included (see notes.ts). */
+	notes: AgentNote[];
 	tags: string[];
 	category: string | null;
 	reasons: string[];
@@ -43,6 +46,16 @@ const latest = (...dates: (Date | null)[]) =>
 
 type Ranked = Omit<ReadingItem, 'category'>;
 
+/** Highlighted in the window: counts as reacting to it, like writing a note. */
+const highlightedSince = (
+	kind: 'link' | 'post',
+	userId: string,
+	itemId: unknown,
+	since: Date
+) => sql`
+	exists (select 1 from highlights h where h.user_id = ${userId} and h.item_kind = ${kind}
+		and h.item_id = ${itemId} and h.created_at >= ${since.getTime()})`;
+
 /** Strongest reaction first, then most recent. */
 export function rankReading<T extends Pick<ReadingItem, 'score' | 'lastActivity'>>(items: T[]) {
 	return [...items].sort(
@@ -52,8 +65,8 @@ export function rankReading<T extends Pick<ReadingItem, 'score' | 'lastActivity'
 
 /**
  * What the user read and reacted to in the last `days`: saved links they
- * finished, starred, opened, shared or wrote a note on, and (with `posts`)
- * feed posts they opened or shared. A post they saved or starred is listed
+ * finished, starred, opened, shared, wrote a note on or highlighted, and (with
+ * `posts`) feed posts they opened, shared or highlighted. A post they saved or starred is listed
  * once, as its link.
  */
 export async function recentReading(
@@ -73,7 +86,12 @@ export async function recentReading(
 					gte(links.starredAt, since),
 					gte(links.openedAt, since),
 					gte(links.citedAt, since),
-					and(isNotNull(links.note), ne(links.note, ''), gte(links.updatedAt, since))
+					and(isNotNull(links.note), ne(links.note, ''), gte(links.updatedAt, since)),
+					highlightedSince('link', userId, links.id, since),
+					and(
+						isNotNull(links.sourceEntryId),
+						highlightedSince('post', userId, links.sourceEntryId, since)
+					)
 				)
 			)
 		)
@@ -101,7 +119,11 @@ export async function recentReading(
 				.where(
 					and(
 						eq(entryState.userId, userId),
-						or(gte(entryState.openedAt, since), gte(entryState.citedAt, since)),
+						or(
+							gte(entryState.openedAt, since),
+							gte(entryState.citedAt, since),
+							highlightedSince('post', userId, feedEntries.id, since)
+						),
 						sql`not exists (select 1 from links l where l.user_id = ${userId}
 							and l.source_entry_id = ${feedEntries.id})`
 					)
@@ -111,10 +133,17 @@ export async function recentReading(
 		: [];
 
 	const withTagList = await withTags(db, linkRows);
+	const notesOf = await loadNotes(db, userId, [
+		...withTagList.flatMap(linkParts),
+		...postRows.map((p) => ({ kind: 'post' as const, id: p.id }))
+	]);
+	const highlighted = (notes: AgentNote[]) => notes.filter((n) => n.quote).length;
 	const items: Ranked[] = [
 		...withTagList.map((l) => {
+			const notes = notesOf({ note: l.note, at: l.updatedAt }, ...linkParts(l));
 			const signals: ReadingSignals = {
-				note: Boolean(l.note?.trim()),
+				note: notes.some((n) => n.text),
+				highlights: highlighted(notes),
 				starred: l.isReference,
 				cites: l.citeCount,
 				opened: Boolean(l.openedAt),
@@ -128,15 +157,25 @@ export async function recentReading(
 				source: l.siteName,
 				author: l.author,
 				note: l.note,
+				notes,
 				tags: l.tags,
 				reasons: reactionReasons(signals),
 				score: reactionScore(signals),
-				lastActivity: latest(l.readAt, l.starredAt, l.openedAt, l.citedAt, l.updatedAt)
+				lastActivity: latest(
+					l.readAt,
+					l.starredAt,
+					l.openedAt,
+					l.citedAt,
+					l.updatedAt,
+					...notes.map((n) => new Date(n.at))
+				)
 			};
 		}),
 		...postRows.map((p) => {
+			const notes = notesOf(null, { kind: 'post', id: p.id });
 			const signals: ReadingSignals = {
-				note: false,
+				note: notes.some((n) => n.text),
+				highlights: highlighted(notes),
 				starred: false,
 				cites: p.citedAt ? 1 : 0,
 				opened: Boolean(p.openedAt),
@@ -150,10 +189,11 @@ export async function recentReading(
 				source: p.feedTitle,
 				author: p.author,
 				note: null,
+				notes,
 				tags: [],
 				reasons: reactionReasons(signals),
 				score: reactionScore(signals),
-				lastActivity: latest(p.openedAt, p.citedAt)
+				lastActivity: latest(p.openedAt, p.citedAt, ...notes.map((n) => new Date(n.at)))
 			};
 		})
 	];

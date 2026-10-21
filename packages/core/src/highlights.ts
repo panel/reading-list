@@ -1,5 +1,5 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import { highlights, type Db } from './db';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { highlights, type Db, type Highlight } from './db';
 import type { PlaceKind } from './places';
 
 /**
@@ -87,6 +87,35 @@ export function highlightsFor(db: Db, userId: string, kind: PlaceKind, itemId: s
 		.from(highlights)
 		.where(ownItem(userId, kind, itemId))
 		.orderBy(highlights.block, highlights.createdAt);
+}
+
+/** The highlights on several articles at once, oldest first. */
+export async function highlightsForItems(
+	db: Db,
+	userId: string,
+	items: { kind: PlaceKind; id: string }[]
+) {
+	// D1 binds at most 100 parameters a query, so look them up in batches.
+	const BATCH = 80;
+	const rows: Highlight[] = [];
+	for (const kind of ['post', 'link'] as const) {
+		const ids = [...new Set(items.filter((i) => i.kind === kind).map((i) => i.id))];
+		for (let i = 0; i < ids.length; i += BATCH) {
+			rows.push(
+				...(await db
+					.select()
+					.from(highlights)
+					.where(
+						and(
+							eq(highlights.userId, userId),
+							eq(highlights.itemKind, kind),
+							inArray(highlights.itemId, ids.slice(i, i + BATCH))
+						)
+					))
+			);
+		}
+	}
+	return rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
 /** All your highlights, newest first. */

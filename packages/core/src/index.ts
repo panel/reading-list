@@ -125,6 +125,7 @@ export {
 	HIGHLIGHT_MAX_CHARS,
 	HIGHLIGHT_NOTE_MAX_CHARS,
 	highlightsFor,
+	highlightsForItems,
 	listHighlights,
 	parseHighlight,
 	parseHighlightNote,

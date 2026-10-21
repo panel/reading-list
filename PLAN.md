@@ -720,7 +720,13 @@ hand.
   first, grouped by article, with Copy (the passage, then title and URL).
 - **Housekeeping:** a highlighted post isn't pruned; deleting a link deletes its
   highlights.
-- **Not yet:** highlights in search, the reading digest and MCP, and in exports.
+- **For agents, highlights are notes.** Links and posts from the API and MCP carry
+  `notes`: the link's own note (`quote: null`) and each highlight (`quote` plus its note,
+  if any), a post and the link it was saved as gathered together
+  (`lib/server/notes.ts`). The reading digest counts a highlight like a note ("highlighted
+  2 passages") and lists what you highlighted in its window. Read-only: highlights are
+  made in the app.
+- **Not yet:** highlights in search and in exports.
 - **Status: built.** Checked on the local dev server in a phone-sized browser: a selection
   from a paragraph into a numbered list saved with its numbers and a note, part of a
   bullet saved without one, both marked again after a reload, note edited, one deleted,
